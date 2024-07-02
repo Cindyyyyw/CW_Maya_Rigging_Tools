@@ -22,7 +22,7 @@ def get_child_jnt(rootJntLis):
     1. fullJntLis: list(nested)
         - a list of root and child joints in hierarchy order
     ### Note:
-    Function reads the max amount of child joints from the first joint and uses 
+    Function gets the max amount of child joints from the first joint and uses 
     that number as a reference for all joints in the list.
     ### Example:
         in  ->  [a_ik_jnt, a_fk_jnt, a_jnt]\n
@@ -47,10 +47,10 @@ def get_child_jnt(rootJntLis):
         fullJntLis.append(temp)
     return fullJntLis
     
-def read_jnt_pfx(name):
+def get_jnt_pfx(name):
     """
     ### Description:
-    returns prefix of an joint before 'fk', 'ik', or 'jnt'
+    returns prefix of an joint before 'fk', 'ik', 'rev' or 'jnt'
     ### Parameters:
     1. name: string
         - the joint object's name
@@ -75,12 +75,12 @@ def read_jnt_pfx(name):
     for i in range(len(buffer)):
         current = buffer[i]
         current = current.lower()
-        if current == 'fk' or current == 'ik' or current == 'jnt':
+        if current == 'fk' or current == 'ik' or current == 'rev' or current == 'jnt':
             pos = i
             break
     # no keyword detected
     if pos == -1:
-        raise ValueError("invalid joint name, only names with 'ik', 'fk', or 'jnt' are accepted.")
+        raise ValueError("invalid joint name, only names with 'ik', 'fk', 'rev', or 'jnt' are accepted.")
 
     # append everything before 'fk' or 'ik' back into the namePfx
     namePfx = buffer[0]
@@ -112,7 +112,7 @@ def create_ik_fk_system(blend = False):
         of child joints among the other root joints
     """
     rootJntLis = get_root_jnt()
-    jntPfx = read_jnt_pfx(rootJntLis[0])
+    jntPfx = get_jnt_pfx(rootJntLis[0])
     fullJntLis = get_child_jnt(rootJntLis)
     floatNode = cmds.createNode('floatCorrect', name = jntPfx + '_ik_fk_ctrl_float')
     cmds.setAttr(floatNode + '.clampOutput', True)
@@ -150,7 +150,7 @@ def get_root_jnt():
     rootJntLis: unicode list
     """
     rootJointName = cmds.ls(selection = True)[0]
-    prefix = read_jnt_pfx(rootJointName)
+    prefix = get_jnt_pfx(rootJointName)
     rootJntLis = [  (prefix+'_ik_jnt').decode('utf_8'),
                     (prefix+'_fk_jnt').decode('utf_8'),
                     (prefix+'_jnt').decode('utf_8')]
@@ -180,7 +180,8 @@ def create_ctrl(ctrlName, type='open_circle', color = 'blue', matchObj = '', con
             cmds.parentConstraint(ctrlName, matchObj, maintainOffset = True)
     return ctrlName
 
-def constraint_jnt():
+def constraint_jnt(ctrlType='open_circle'):
+    print(ctrlType)
     """
     ### Description:
     Creates a control with offset grp that constraints the selected joints
@@ -188,7 +189,7 @@ def constraint_jnt():
     jnt_list = cmds.ls(selection= True)
     for jnt in jnt_list:
         ctrl = tpControl.Control(name=jnt+'_ctrl')
-        # ctrl.set_type('open_circle')
+        ctrl.set_type(ctrlType)
         ctrl.add_offset_grp()
         cmds.matchTransform(ctrl.get_top_group(), jnt)
         cmds.parentConstraint(ctrl.get_name(), jnt, maintainOffset = True)
@@ -205,10 +206,11 @@ def create_IK_handle(rootJnt, d=10):
     """
     midJnt = cmds.listRelatives(rootJnt, ad = False, children=True, type = 'joint')[0]
     endJnt = cmds.listRelatives(midJnt, ad = False, children=True, type = 'joint')[0]
-    ikHandle = cmds.ikHandle(n = read_jnt_pfx(rootJnt)+'_ikHandle', startJoint=rootJnt, endEffector=endJnt, autoPriority = False, solver='ikRPsolver')
+    ikHandle = cmds.ikHandle(n = get_jnt_pfx(rootJnt)+'_ikHandle', startJoint=rootJnt, endEffector=endJnt, autoPriority = False, solver='ikRPsolver')
     position = calculate_pole_vector_position(rootJnt, midJnt, endJnt, d)
     
-    return ikHandle, position
+    # print(get_jnt_pfx(rootJnt)+'_ikHandle')
+    return get_jnt_pfx(rootJnt)+'_ikHandle', position
     
 def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distance=10):
 
@@ -220,18 +222,26 @@ def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distanc
     middle_vector = om.MVector(middle_pos[0], middle_pos[1], middle_pos[2])
     end_vector = om.MVector(end_pos[0], end_pos[1], end_pos[2])
 
+    # print(start_vector, middle_vector, end_vector)
     line = end_vector - start_vector
     point = middle_vector - start_vector
-
+    print("point*line:"+ str(point*line))
+    print("line*line:" + str(line*line))
     scale_value = (point * line) / (line * line)
+    print("scale value = "+ str(scale_value))
     projected_vector = line * scale_value + start_vector
+    print("line * scale_value :"+str(line * scale_value ))
+    print("projected vector:"+str(projected_vector))
 
     final_vector = middle_vector - projected_vector
+    print("final vector:"+ str(final_vector))
+
     final_vector.normalize()
+    print("final vector:"+ str(final_vector))
 
     final_vector *= distance
     final_position = middle_vector + final_vector
-
+    print("final pos:"+str(final_position))
     return final_position
     
 def place_ctrl_at_pos(ctrlName, position):
@@ -246,11 +256,6 @@ def place_ctrl_at_pos(ctrlName, position):
     create_ctrl(ctrlName = ctrlName, type="open_circle", matchObj=loc)
     cmds.delete(loc)
 
-    # ctrl = tpControl.Control(name=ctrlName)
-    # ctrl.set_type('open_circle')
-    # ctrl.add_offset_grp()
-    # cmds.matchTransform(ctrl.get_top_group(), loc)
-
 
 def create_3_jnt_RP_IK():
     """
@@ -261,11 +266,21 @@ def create_3_jnt_RP_IK():
     """
     rootJnt = cmds.ls(selection = True, type='joint')[0] 
     ikHandle, pos = create_IK_handle(rootJnt)
-    ctrlName = read_jnt_pfx(rootJnt)+"_pv_ctrl"
+    ctrlName = get_jnt_pfx(rootJnt)+"_pv_ctrl"
     place_ctrl_at_pos(ctrlName, pos)
-    cmds.poleVectorConstraint( ctrlName, ikHandle[0])
+    cmds.poleVectorConstraint( ctrlName, ikHandle)
+    cmds.select(rootJnt)
+    constraint_jnt("open_circle")
+    cmds.select(ikHandle)
+    print(ikHandle)
+    constraint_jnt("move")
+
+# constraint_jnt()
 
 
 # create_3_jnt_RP_IK()
     
 # create_ik_fk_system(1)
+
+# sel = cmds.ls(selection = 1)
+# calculate_pole_vector_position(sel[0], sel[1], sel[2])
