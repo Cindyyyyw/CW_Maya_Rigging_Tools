@@ -2,9 +2,9 @@ import maya.cmds as cmds
 import maya.api.OpenMaya as om
 import sys
 # on windows
-# sys.path.append("E:/Rigging/scripts/tpTools")
+sys.path.append("E:/Rigging/scripts/tpTools")
 # on mac
-sys.path.append("/Volumes/CINDY/Rigging/scripts/tpTools")
+# sys.path.append("/Volumes/CINDY/Rigging/scripts/tpTools")
 
 import tpRig.tpControl.tpControl as tpControl
 
@@ -181,7 +181,6 @@ def create_ctrl(ctrlName, type='open_circle', color = 'blue', matchObj = '', con
     return ctrlName
 
 def constraint_jnt(ctrlType='open_circle'):
-    print(ctrlType)
     """
     ### Description:
     Creates a control with offset grp that constraints the selected joints
@@ -189,7 +188,7 @@ def constraint_jnt(ctrlType='open_circle'):
     jnt_list = cmds.ls(selection= True)
     for jnt in jnt_list:
         ctrl = tpControl.Control(name=jnt+'_ctrl')
-        ctrl.set_type(ctrlType)
+        # ctrl.set_type(ctrlType)
         ctrl.add_offset_grp()
         cmds.matchTransform(ctrl.get_top_group(), jnt)
         cmds.parentConstraint(ctrl.get_name(), jnt, maintainOffset = True)
@@ -209,10 +208,9 @@ def create_IK_handle(rootJnt, d=10):
     ikHandle = cmds.ikHandle(n = get_jnt_pfx(rootJnt)+'_ikHandle', startJoint=rootJnt, endEffector=endJnt, autoPriority = False, solver='ikRPsolver')
     position = calculate_pole_vector_position(rootJnt, midJnt, endJnt, d)
     
-    # print(get_jnt_pfx(rootJnt)+'_ikHandle')
     return get_jnt_pfx(rootJnt)+'_ikHandle', position
     
-def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distance=10):
+def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distance=30):
 
     start_pos = cmds.xform(start_joint, q=True, ws=True, t=True)
     middle_pos = cmds.xform(middle_joint, q=True, ws=True, t=True)
@@ -222,26 +220,20 @@ def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distanc
     middle_vector = om.MVector(middle_pos[0], middle_pos[1], middle_pos[2])
     end_vector = om.MVector(end_pos[0], end_pos[1], end_pos[2])
 
-    # print(start_vector, middle_vector, end_vector)
     line = end_vector - start_vector
     point = middle_vector - start_vector
-    print("point*line:"+ str(point*line))
-    print("line*line:" + str(line*line))
+
     scale_value = (point * line) / (line * line)
-    print("scale value = "+ str(scale_value))
     projected_vector = line * scale_value + start_vector
-    print("line * scale_value :"+str(line * scale_value ))
-    print("projected vector:"+str(projected_vector))
+
 
     final_vector = middle_vector - projected_vector
-    print("final vector:"+ str(final_vector))
 
     final_vector.normalize()
-    print("final vector:"+ str(final_vector))
 
     final_vector *= distance
     final_position = middle_vector + final_vector
-    print("final pos:"+str(final_position))
+
     return final_position
     
 def place_ctrl_at_pos(ctrlName, position):
@@ -271,9 +263,8 @@ def create_3_jnt_RP_IK():
     cmds.poleVectorConstraint( ctrlName, ikHandle)
     cmds.select(rootJnt)
     constraint_jnt("open_circle")
-    cmds.select(ikHandle)
-    print(ikHandle)
-    constraint_jnt("move")
+    # cmds.select(ikHandle)
+    # constraint_jnt("move")
 
 # constraint_jnt()
 
@@ -282,5 +273,7 @@ def create_3_jnt_RP_IK():
     
 # create_ik_fk_system(1)
 
-# sel = cmds.ls(selection = 1)
-# calculate_pole_vector_position(sel[0], sel[1], sel[2])
+
+
+sel = cmds.ls(selection = 1)
+place_ctrl_at_pos('test',calculate_pole_vector_position(sel[0], sel[1], sel[2], distance = 75))
