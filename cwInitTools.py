@@ -2,9 +2,9 @@ import maya.cmds as cmds
 import maya.api.OpenMaya as om
 import sys
 # on windows
-sys.path.append("E:/Rigging/scripts/tpTools")
+# sys.path.append("E:/Rigging/scripts/tpTools")
 # on mac
-# sys.path.append("/Volumes/CINDY/Rigging/scripts/tpTools")
+sys.path.append("/Volumes/CINDY/Rigging/scripts/tpTools")
 
 import tpRig.tpControl.tpControl as tpControl
 
@@ -122,6 +122,7 @@ def create_ik_fk_system(blend = False):
     
     for subJntLis in fullJntLis:
         constraintNode = cmds.parentConstraint(subJntLis[0],subJntLis[1],subJntLis[2], maintainOffset=False)[0]
+        cmds.setAttr(constraintNode+'.interpType', 2)
         constraintNodeAttrLis = cmds.listAttr(constraintNode, userDefined=True)
         
         cmds.connectAttr(floatNode + '.outFloat', constraintNode + '.' + constraintNodeAttrLis[0])
@@ -177,24 +178,29 @@ def create_ctrl(ctrlName, type='open_circle', color = 'blue', matchObj = '', con
     if matchObj != '':
         cmds.matchTransform(newCtrl.get_top_group(), matchObj)
         if constraint:
-            cmds.parentConstraint(ctrlName, matchObj, maintainOffset = True)
+            constraintNode = cmds.parentConstraint(ctrlName, matchObj, maintainOffset = True)
+            cmds.setAttr(constraintNode[0]+'.interpType', 2)
     return ctrlName
 
-def constraint_jnt(ctrlType='open_circle'):
-    """
+def constraint_jnt(ctrlType='open_circle', upperConstraint = 0):
+    """f
     ### Description:
     Creates a control with offset grp that constraints the selected joints
     """
     jnt_list = cmds.ls(selection= True)
     for jnt in jnt_list:
         ctrl = tpControl.Control(name=jnt+'_ctrl')
-        # ctrl.set_type(ctrlType)
+        ctrl.set_type(ctrlType)
         ctrl.add_offset_grp()
         cmds.matchTransform(ctrl.get_top_group(), jnt)
-        cmds.parentConstraint(ctrl.get_name(), jnt, maintainOffset = True)
+        constraintNode = cmds.parentConstraint(ctrl.get_name(), jnt, maintainOffset = True)
+        cmds.setAttr(constraintNode[0]+'.interpType', 2)
+        if upperConstraint:
+            cmds.parentConstraint(cmds.listRelatives(jnt, p=1)[0], ctrl.get_top_group(), maintainOffset=1)
 
 
-def create_IK_handle(rootJnt, d=10):
+
+def create_IK_handle(rootJnt, d=30):
     """
     ### Description:
     Gets 2 children down the chain, and create a ik handle using rotate plane solver.
@@ -210,7 +216,7 @@ def create_IK_handle(rootJnt, d=10):
     
     return get_jnt_pfx(rootJnt)+'_ikHandle', position
     
-def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distance=30):
+def calculate_pole_vector_position(start_joint, middle_joint, end_joint, distance=50):
 
     start_pos = cmds.xform(start_joint, q=True, ws=True, t=True)
     middle_pos = cmds.xform(middle_joint, q=True, ws=True, t=True)
@@ -263,17 +269,18 @@ def create_3_jnt_RP_IK():
     cmds.poleVectorConstraint( ctrlName, ikHandle)
     cmds.select(rootJnt)
     constraint_jnt("open_circle")
-    # cmds.select(ikHandle)
-    # constraint_jnt("move")
+    cmds.select(ikHandle)
+    constraint_jnt("move")
 
-# constraint_jnt()
+# constraint_jnt("open_circle")
 
 
 # create_3_jnt_RP_IK()
     
 # create_ik_fk_system(1)
 
+constraint_jnt("cube", 1)
 
 
-sel = cmds.ls(selection = 1)
-place_ctrl_at_pos('test',calculate_pole_vector_position(sel[0], sel[1], sel[2], distance = 75))
+# sel = cmds.ls(selection = 1)
+# place_ctrl_at_pos('test',calculate_pole_vector_position(sel[0], sel[1], sel[2], distance = 40))
