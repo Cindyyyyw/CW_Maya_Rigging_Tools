@@ -112,7 +112,7 @@ def build_twist_joints(selected_joint, num_twist_joints, solvingMethod):
             
             # Connect the outputY to the twist joint's rotateX
             cmds.connectAttr("%s.outputY" % mult_div_node, "%s.rotateX" % twist_joint)
-    
+        
     # # Ensure the original child joint remains parented to the selected joint
     # cmds.parent(child_joint, selected_joint)
 
