@@ -14,15 +14,19 @@ def change_curve_width(*args):
     
     # Loop through selected objects
     for obj in selected_objects:
-        # Find the shape node (since 'lineWidth' is typically on the shape, not the transform)
-        shape_nodes = cmds.listRelatives(obj, shapes=True)
-        for shape_node in shape_nodes:
+        # Check if the object is a NURBS curve
+        if cmds.objectType(obj) == "nurbsCurve":
+            # Find the shape node (since 'lineWidth' is typically on the shape, not the transform)
+            shape_node = cmds.listRelatives(obj, shapes=True)[0]
             # Apply the new width using 'setAttr' to change the curve width
             if cmds.attributeQuery('lineWidth', node=shape_node, exists=True):
                 cmds.setAttr(shape_node + ".lineWidth", new_width)
-                print("Object [{}] width changed.".format(shape_node))
             else:
                 cmds.warning("Object {} does not have the 'lineWidth' attribute.".format(obj))
+        else:
+            cmds.warning("{} is not a NURBS curve!".format(obj))
+            cmds.warning("{} is a {}!".format(obj, cmds.objectType(obj)))
+
 
 # Function to create the UI
 def create_ui():

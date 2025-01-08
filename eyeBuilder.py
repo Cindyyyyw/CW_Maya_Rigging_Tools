@@ -137,15 +137,14 @@ def change_crv_color():
 
 
 
-ofc_lis = cmds.ls(sl = 1)
-crv = 'r_eye_up_crease_final_crvShape'
+# ofc_lis = cmds.ls(sl = 1)
+crv = 'up_finalShape'
 
-for i in range(30):
-    name = ofc_lis[i].replace('_jnt', '_pci')
-    print(ofc_lis[i])
-    pci = cmds.createNode('pointOnCurveInfo', n = name)
+for i in range(9):
+    pci = cmds.createNode('pointOnCurveInfo', n = "eye_up_pci_%s"%i)
+    jnt = cmds.joint(n="eye_up_jnt_%s"%i)
     cmds.connectAttr(crv + '.worldSpace', pci + '.inputCurve')
-    cmds.connectAttr(name + '.position', ofc_lis[i] + '.t')
+    cmds.connectAttr(pci + '.position', jnt + '.t')
     cmds.setAttr(pci+ '.parameter', i)
 # attach_crv2()
 # build_joint_on_crv()

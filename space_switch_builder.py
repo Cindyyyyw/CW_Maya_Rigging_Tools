@@ -40,7 +40,8 @@ def add_space_attr(obj_lis, space_lis):
 def setup_node_graph(obj_lis, space_lis):
     for obj in obj_lis:
         num_of_space = len(space_lis)
-        num_of_weighted_node_grp = int(math.ceil(num_of_space/3))
+        num_of_weighted_node_grp = int(math.ceil(num_of_space/3.0))
+
         
         cond_nodeA = []
         cond_nodeB = []
@@ -99,11 +100,13 @@ def setup_node_graph(obj_lis, space_lis):
             
             weighted_nodeB.append(nodeB)
             curr_pos = i*3
-            if curr_pos+2 > num_of_space:
+            # print("curr_pos:"+str(curr_pos))
+            # print("num_of_space"+str(num_of_space))
+            if curr_pos + 2 >= num_of_space:
                 num_of_connections = num_of_space - curr_pos
             else:
                 num_of_connections = 3
-            
+            # print("num_of_connections"+str(num_of_connections))
             if num_of_connections >= 1:
                 cmds.connectAttr("%s.outColorR"%cond_nodeA[curr_pos], "%s.input1X"%nodeA)
                 cmds.connectAttr("%s.outputX"%nodeA, "%s.input1D[0]"%weight_node[curr_pos])
@@ -131,13 +134,9 @@ def setup_node_graph(obj_lis, space_lis):
 
 
 
-spaces = ["Global", "Local", "Cog", "Chest", "Hip", "Head"]
+spaces = ["Global", "Local", "Sheath", "leftHand", "rightHand"]
 obj_lis = cmds.ls(sl=1, ap=1)
 
 add_space_attr(obj_lis, spaces)
 obj_loc_grp = create_space_loc(obj_lis, spaces)
 setup_node_graph(obj_lis, spaces)
-
-
-
-
