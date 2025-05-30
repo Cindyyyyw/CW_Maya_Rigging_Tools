@@ -22,7 +22,6 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpacerItem>
-#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QVBoxLayout>
@@ -46,7 +45,6 @@ public:
     QPushButton *btn_sortSelection;
     QPushButton *btn_mergeCrv;
     QWidget *tab_2;
-    QSpinBox *spinBox;
     QWidget *tab_ctrl;
     QWidget *wgt_colorPicker;
     QGridLayout *gridLayout;
@@ -159,11 +157,6 @@ public:
         tabWidget->addTab(tab, QString());
         tab_2 = new QWidget();
         tab_2->setObjectName("tab_2");
-        spinBox = new QSpinBox(tab_2);
-        spinBox->setObjectName("spinBox");
-        spinBox->setGeometry(QRect(110, 200, 42, 22));
-        spinBox->setWrapping(false);
-        spinBox->setButtonSymbols(QAbstractSpinBox::ButtonSymbols::NoButtons);
         tabWidget->addTab(tab_2, QString());
         tab_ctrl = new QWidget();
         tab_ctrl->setObjectName("tab_ctrl");
@@ -216,6 +209,8 @@ public:
         sizePolicy2.setVerticalStretch(0);
         sizePolicy2.setHeightForWidth(sdr_width->sizePolicy().hasHeightForWidth());
         sdr_width->setSizePolicy(sizePolicy2);
+        sdr_width->setMinimum(1);
+        sdr_width->setMaximum(50);
         sdr_width->setSliderPosition(1);
         sdr_width->setOrientation(Qt::Orientation::Horizontal);
 
@@ -239,6 +234,7 @@ public:
         sdr_color->setObjectName("sdr_color");
         sizePolicy2.setHeightForWidth(sdr_color->sizePolicy().hasHeightForWidth());
         sdr_color->setSizePolicy(sizePolicy2);
+        sdr_color->setMaximum(31);
         sdr_color->setOrientation(Qt::Orientation::Horizontal);
 
         gridLayout->addWidget(sdr_color, 2, 1, 1, 1);
@@ -323,10 +319,8 @@ public:
         MainWindow->setStatusBar(statusbar);
 
         retranslateUi(MainWindow);
-        QObject::connect(sdr_width, &QSlider::sliderMoved, txt_width, qOverload<>(&QLineEdit::update));
-        QObject::connect(txt_width, &QLineEdit::editingFinished, sdr_width, qOverload<>(&QSlider::update));
 
-        tabWidget->setCurrentIndex(1);
+        tabWidget->setCurrentIndex(2);
 
 
         QMetaObject::connectSlotsByName(MainWindow);
@@ -347,7 +341,7 @@ public:
         btn_setCtrlColor->setText(QCoreApplication::translate("MainWindow", "Set color", nullptr));
         lbl_colorIndicator->setText(QString());
         btn_setCtrlWidth->setText(QCoreApplication::translate("MainWindow", "Set width", nullptr));
-        txt_width->setText(QCoreApplication::translate("MainWindow", "1.0", nullptr));
+        txt_width->setText(QCoreApplication::translate("MainWindow", "1", nullptr));
         lbl_color->setText(QCoreApplication::translate("MainWindow", "Color", nullptr));
         lbl_width->setText(QCoreApplication::translate("MainWindow", "Width", nullptr));
         lbl_ctrlName->setText(QCoreApplication::translate("MainWindow", "Control name", nullptr));

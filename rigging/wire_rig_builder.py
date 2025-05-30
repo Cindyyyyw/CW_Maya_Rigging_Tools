@@ -92,7 +92,9 @@ def build_curve_layers(layers=3, axis='X', direction=1):
     all_npo_groups = []
     final_crv_layer = ""
     final_crv_layer_no = 0
-    for layer in range(1, layers + 1):
+    
+    # Create one extra curve layer (layers + 1) but keep joint creation the same
+    for layer in range(1, layers + 1): 
         spans = 2 ** layer
         start_point = [0, 0, 0]
         end_point = [0, 0, 0]
@@ -126,8 +128,6 @@ def build_curve_layers(layers=3, axis='X', direction=1):
         )[0]
 
         curve_name = "curve_layer_%s" % layer
-        final_crv_layer = curve_name
-        final_crv_layer_no = int(layer)
         cmds.rename(rebuilt_curve, curve_name)
         rebuilt_curve = curve_name  # Update the rebuilt_curve variable with the new name
 
@@ -205,10 +205,40 @@ def build_curve_layers(layers=3, axis='X', direction=1):
 
         # Skin the next layer of curve to the child joints of the current layer
         if previous_layer_joints:
-            skin_cluster = cmds.skinCluster(previous_layer_joints, rebuilt_curve, name="skinCluster_layer_%s" % layer, tsb=1)[0]
+            skin_cluster = cmds.skinCluster(previous_layer_joints, rebuilt_curve, name="skinCluster_layer_%s" % layer, tsb=1,bm=0)[0]
 
         # Update the previous layer joints
         previous_layer_joints = joints
+        
+        if layer==layers: # for the last layer
+            # Create an initial linear curve with two points
+            initial_curve = cmds.curve(d=1, p=[start_point, end_point], name="initial_curve_layer_%s" % layer)
+
+            # Rebuild the curve with the required parameters
+            rebuilt_curve = cmds.rebuildCurve(
+                initial_curve,
+                ch=1,  # History enabled
+                rpo=1,  # Replace original
+                rt=0,  # Keep parameterization
+                end=1,  # Keep end knots
+                kr=0,  # Keep range
+                kcp=0,  # Don't keep control points
+                kep=1,  # Keep endpoints
+                kt=0,  # Uniform parameterization
+                s=spans+1,  # Number of spans
+                d=3  # Degree of the curve
+            )[0]
+            curve_name = "curve_layer_%s" % (layer+1)
+            cmds.rename(rebuilt_curve, curve_name)
+            rebuilt_curve = curve_name  # Update the rebuilt_curve variable with the new name
+
+            # Rename the shape node to match the curve
+            curve_shape = cmds.listRelatives(rebuilt_curve, shapes=True)[0]
+            cmds.rename(curve_shape, "%sShape" % curve_name)
+            final_crv_layer = curve_name
+            final_crv_layer_no = int(layer+1)
+            skin_cluster = cmds.skinCluster(previous_layer_joints, rebuilt_curve, name="skinCluster_layer_%s" % (layer+1), tsb=1, bm=0)[0]
+            
 
     # Group all NPO groups together
     master_group = cmds.group(all_npo_groups, name="All_NPOs")
@@ -273,19 +303,18 @@ def build_curve_layers(layers=3, axis='X', direction=1):
 
     
     # CTRL visibility control
-    cmds.addAttr( "master_ctrl", longName='ctrlVisibility', attributeType='long', h=0, dv=1, hxv=1, hnv=1, min = 0, max =final_crv_layer_no)
+    cmds.addAttr( "master_ctrl", longName='ctrlVisibility', attributeType='long', h=0, dv=1, hxv=1, hnv=1, min = 0, max =final_crv_layer_no-1)
     cmds.setAttr( "master_ctrl.ctrlVisibility", keyable=False, channelBox = True, lock=False  )
-    for i in range(final_crv_layer_no):
+    for i in range(final_crv_layer_no-1):
         layerVisCondNode = cmds.createNode("condition", n="layer_%s_visibility_condition"%(i+1))
         cmds.setAttr("%s.firstTerm"%layerVisCondNode, i+1)
         cmds.connectAttr("master_ctrl.ctrlVisibility", "%s.secondTerm"%layerVisCondNode)
         cmds.setAttr("%s.operation"%layerVisCondNode, 2)
         cmds.connectAttr("%s.outColorR"%layerVisCondNode, "layer_%s_NPOs.visibility"%(i+1))
-        
-        
-    
+
+
 # Launch the UI
-if __name__ == '__main__':
+def runUI():
     try:
         CurveLayerBuilderUI()
     except Exception as e:

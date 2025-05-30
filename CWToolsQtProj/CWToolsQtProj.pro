@@ -16,7 +16,8 @@ HEADERS += \
     mainwindow.h
 
 FORMS += \
-    mainwindow.ui
+    mainwindow.ui \
+    riggingTool_1.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

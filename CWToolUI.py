@@ -7,17 +7,18 @@ from PySide2 import QtUiTools, QtCore, QtGui, QtWidgets
 from functools import partial # optional, for passing args during signal function calls
 import traceback
 from PySide2.QtGui import QIntValidator
+from importlib import reload
+
 import sys
 sys.path.insert(0, '/Volumes/CINDY/Rigging/CW_Maya_Rigging_Tools/')
 
-from importlib import reload
-
 import utility as util
 import control as ctrl
+import rigging as rig
 
 reload(util)
 reload(ctrl)
-
+reload(rig)
 
 # reload(util.place_locator_at_vert_center)
 # reload(util.build_zero_grp)
@@ -26,15 +27,15 @@ reload(ctrl)
 # reload(util.sort_selection)
 # reload(util.merge_crv)
 # reload(util.set_history_not_interesting)
-reload(ctrl.CWControl)
-
+# reload(ctrl.CWControl)
+reload(rig.attach_flc_to_mesh)
 
 
 def get_maya_main_window():
     main_window_ptr = omui.MQtUtil.mainWindow()
     return wrapInstance(int(main_window_ptr), QtWidgets.QWidget)
 
-class MayaUITemplate(QtWidgets.QWidget):
+class CWToolsMainUI(QtWidgets.QWidget):
     """
     Create a default tool window.
     """
@@ -44,7 +45,7 @@ class MayaUITemplate(QtWidgets.QWidget):
         """
         Initialize class.
         """
-        super(MayaUITemplate, self).__init__(parent)
+        super(CWToolsMainUI, self).__init__(parent)
         self.setWindowFlags(    QtCore.Qt.Tool |
                                 QtCore.Qt.WindowTitleHint |
                                 QtCore.Qt.WindowCloseButtonHint |
@@ -88,6 +89,17 @@ class MayaUITemplate(QtWidgets.QWidget):
         self.lbl_colorIndicator = self.widget.findChild(QtWidgets.QLabel, 'lbl_colorIndicator')
         self.btn_setCtrlColor = self.widget.findChild(QtWidgets.QPushButton, 'btn_setCtrlColor')
 
+        # rigging tab btns
+        self.btn_wireRig = self.widget.findChild(QtWidgets.QPushButton, 'btn_wireRig')
+        self.btn_twistJoint = self.widget.findChild(QtWidgets.QPushButton, 'btn_twistJoint')
+        self.btn_locatorOnEdge = self.widget.findChild(QtWidgets.QPushButton, 'btn_locatorOnEdge')
+        self.btn_attachFlc = self.widget.findChild(QtWidgets.QPushButton, 'btn_attachFlc')
+        print(self.btn_attachFlc)
+
+
+
+
+
 
         self.libDir = '/Volumes/CINDY/Rigging/CW_Maya_Rigging_Tools/control/'
 
@@ -115,10 +127,12 @@ class MayaUITemplate(QtWidgets.QWidget):
         self.sdr_color.valueChanged.connect(self.sdr_colorUpdateEvt)
         self.btn_setCtrlColor.clicked.connect(self.setCtrlColor)
 
-    """
-    Your code goes here
-    """
-        
+        self.btn_wireRig.clicked.connect(self.launchWireRigUI)
+        self.btn_twistJoint.clicked.connect(self.launchTwistJntUI)
+        self.btn_locatorOnEdge.clicked.connect(self.launchlocOnEdgeUI)
+        self.btn_attachFlc.clicked.connect(self.attachFlc)
+
+
     # def resizeEvent(self, event):
     #     """
     #     Called on automatically generated resize event
@@ -228,10 +242,20 @@ class MayaUITemplate(QtWidgets.QWidget):
             for sl in sl_lis:
                 self.ctrlManager.setCurveColor(self.sdr_color.value(), sl)
 
-
     def setCtrlColor(self):
         self.wrapUndoInfo(self.setCtrlColorFunc)
 
+    def launchWireRigUI(self):
+        rig.wireRigUI()
+
+    def launchTwistJntUI(self):
+        rig.twistJntUI()
+
+    def launchlocOnEdgeUI(self):
+        rig.placeLocUI()
+
+    def attachFlc(self):
+        self.wrapUndoInfo(rig.attachFlc)
 
 def openWindow():
     """
@@ -247,9 +271,8 @@ def openWindow():
     #QtWidgets.QApplication(sys.argv)
     mayaMainWindowPtr = omui.MQtUtil.mainWindow()
     mayaMainWindow = wrapInstance(int(mayaMainWindowPtr), QtWidgets.QWidget)
-    MayaUITemplate.window = MayaUITemplate(parent = mayaMainWindow)
-    MayaUITemplate.window.setObjectName('cwToolsWindow') # code above uses this to ID any existing windows
-    # MayaUITemplate.window.setWindowTitle('CW Tools')
-    MayaUITemplate.window.show()
+    CWToolsMainUI.window = CWToolsMainUI(parent = mayaMainWindow)
+    CWToolsMainUI.window.setObjectName('cwToolsWindow') # code above uses this to ID any existing windows
+    CWToolsMainUI.window.show()
     
 openWindow()

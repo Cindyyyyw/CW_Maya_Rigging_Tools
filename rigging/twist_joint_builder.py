@@ -147,5 +147,6 @@ def build_twist_joints_from_UI(*args):
     method = cmds.radioButtonGrp("solvingMethod", query = True, select=True)
     build_twist_joints(selected_joint, num_twist_joints, method)
 
-# Launch the UI
-twist_joint_builder_UI()
+def runUI():
+    # Launch the UI
+    twist_joint_builder_UI()

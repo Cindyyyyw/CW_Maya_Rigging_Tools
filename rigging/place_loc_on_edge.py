@@ -1,7 +1,7 @@
 # Uniformly places user defined amount of locators onto selected edge
 import maya.cmds as cmds
 
-def create_locators_on_edge_ui():
+def locatorsOnEdgeUI():
     """Create a UI for the user to place locators on an edge."""
     # Check if the window already exists and delete it
     if cmds.window("locatorsOnEdgeWin", exists=True):
@@ -16,7 +16,7 @@ def create_locators_on_edge_ui():
     num_locators_field = cmds.intField(value=10, minValue=1)
     
     # Add a button to run the function
-    cmds.button(label="Place Locators", command=lambda _: create_locators_on_edge_from_ui(num_locators_field))
+    cmds.button(label="Place Locators", command=lambda _: locatorsOnEdgeUICallback(num_locators_field))
     
     # Add a close button
     cmds.button(label="Close", command=lambda _: cmds.deleteUI(window))
@@ -24,17 +24,15 @@ def create_locators_on_edge_ui():
     # Show the window
     cmds.showWindow(window)
 
-def create_locators_on_edge_from_ui(num_locators_field):
+def locatorsOnEdgeUICallback(num_locators_field):
     """Callback function for the UI to create locators."""
     try:
         num_locators = cmds.intField(num_locators_field, query=True, value=True)
-        create_locators_on_edge(num_locators)
+        locatorsOnEdge(num_locators)
     except Exception as e:
         cmds.error("Error: %s" % str(e))
 
-import maya.cmds as cmds
-
-def is_consecutive_edges(selection):
+def isConsecutiveEdges(selection):
     
     # Ensure the selection contains edges
     if not selection or not all(".e[" in edge for edge in selection):
@@ -57,11 +55,11 @@ def is_consecutive_edges(selection):
     
     return False
 
-def create_locators_on_edge(num_locators):
+def locatorsOnEdge(num_locators):
     """Place locators along a selected edge."""
     # Ensure the user selected an edge
     selection = cmds.ls(selection=True, fl=True)
-    if not selection or not is_consecutive_edges(selection):
+    if not selection or not isConsecutiveEdges(selection):
         cmds.error("Please select a single edge.")
         return
     
@@ -93,6 +91,8 @@ def create_locators_on_edge(num_locators):
     # Group locators for organizational purposes
     locator_group = cmds.group(locators, name="locators_group")
     print("Created %s locators on %s, grouped as %s." % (num_locators, curve, locator_group))
+    # Clean up
+    cmds.delete(curve)
 
-# Launch the UI
-create_locators_on_edge_ui()
+def runUI():
+    locatorsOnEdgeUI()
