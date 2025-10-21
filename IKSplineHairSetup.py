@@ -56,7 +56,7 @@ for i in range(len(sl)):
     dyna_crv = cmds.duplicate(sl[i], name=sl[i].replace("start", "dyna"))[0]
     cmds.parent(dyna_crv,w=1)
     dyna_crv_lis.append(dyna_crv)
-    
+
 cmds.select(dyna_crv_lis ,replace=1)
 cmds.select('hair_base_proxy', add=1)
 

@@ -13,7 +13,7 @@ def placeLocatorAtVertCenter(sl_list = None):
     Usage:
         >>> placeLocatorAtVertCenter()
     """
-    if not sl_list: sl_list = cmds.ls('*.vtx[*]', selection=True, flatten=True, type='float3')
+    if not sl_list: sl_list = cmds.ls( '*.vtx[*]', flatten= True, selection=True, type='float3')
     if not sl_list: return cmds.warning("[CWTools - placeLocatorAtVertCenter]: No vertices were selected.")
     
     # Initialize sum variables for x, y, z coordinates

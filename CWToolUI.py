@@ -8,6 +8,8 @@ from functools import partial # optional, for passing args during signal functio
 import traceback
 from PySide2.QtGui import QIntValidator
 from importlib import reload
+from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
+
 
 import sys
 sys.path.insert(0, '/Volumes/CINDY/Rigging/CW_Maya_Rigging_Tools/')
@@ -20,7 +22,7 @@ reload(util)
 reload(ctrl)
 reload(rig)
 
-# reload(util.place_locator_at_vert_center)
+reload(util.place_locator_at_vert_center)
 # reload(util.build_zero_grp)
 # reload(util.rename_shape_nodes)
 # reload(util.place_locator_at_vert_center)
@@ -28,7 +30,7 @@ reload(rig)
 # reload(util.merge_crv)
 # reload(util.set_history_not_interesting)
 # reload(ctrl.CWControl)
-reload(rig.attach_flc_to_mesh)
+# reload(rig.attach_flc_to_mesh)
 
 
 def get_maya_main_window():
@@ -39,9 +41,9 @@ class CWToolsMainUI(QtWidgets.QWidget):
     """
     Create a default tool window.
     """
-    window = None
     
     def __init__(self, parent = get_maya_main_window()):
+        # self.window = None
         """
         Initialize class.
         """
@@ -50,9 +52,23 @@ class CWToolsMainUI(QtWidgets.QWidget):
                                 QtCore.Qt.WindowTitleHint |
                                 QtCore.Qt.WindowCloseButtonHint |
                                 QtCore.Qt.CustomizeWindowHint)
+        self.setWindowTitle("CW Tools")
         self.widgetPath = ('/Volumes/CINDY/Rigging/CW_Maya_Rigging_Tools/CWToolsQtProj/')
-        self.widget = QtUiTools.QUiLoader().load(self.widgetPath + 'mainWindow.ui')
-        self.widget.setParent(self)
+        # self.widget = QtUiTools.QUiLoader().load(self.widgetPath + 'mainWindow.ui')
+        loader = QtUiTools.QUiLoader()
+        uifile = QtCore.QFile(self.widgetPath + 'mainWindow.ui')
+        uifile.open(QtCore.QFile.ReadOnly)
+        ui_widget = loader.load(uifile)
+        uifile.close()
+
+        self.widget = ui_widget  # store reference to container
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        # self.smallWidget = QtWidgets.QPushButton("buttonS")
+        # layout.addWidget(self.smallWidget)
+        layout.addWidget(self.widget)
+        
+        # self.widget.setParent(self)
         # set initial window size
         self.resize(300, 600)
         self.setFixedSize(300,600)
@@ -94,7 +110,7 @@ class CWToolsMainUI(QtWidgets.QWidget):
         self.btn_twistJoint = self.widget.findChild(QtWidgets.QPushButton, 'btn_twistJoint')
         self.btn_locatorOnEdge = self.widget.findChild(QtWidgets.QPushButton, 'btn_locatorOnEdge')
         self.btn_attachFlc = self.widget.findChild(QtWidgets.QPushButton, 'btn_attachFlc')
-        print(self.btn_attachFlc)
+        # print(self.btn_attachFlc)
 
 
 
@@ -146,8 +162,7 @@ class CWToolsMainUI(QtWidgets.QWidget):
         """
         Close window.
         """
-        print ('closing window')
-        self.destroy()
+        self.close()
 
     def wrapUndoInfo(self, func):
         try:
@@ -256,7 +271,8 @@ class CWToolsMainUI(QtWidgets.QWidget):
 
     def attachFlc(self):
         self.wrapUndoInfo(rig.attachFlc)
-
+    
+    
 def openWindow():
     """
     ID Maya and attach tool window.
@@ -265,14 +281,19 @@ def openWindow():
     if QtWidgets.QApplication.instance():
         # Id any current instances of tool and destroy
         for win in (QtWidgets.QApplication.allWindows()):
+            print(win.objectName())
             if 'cwToolsWindow' in win.objectName(): # update this name to match name below
-                win.destroy()
+                cmds.warning(f'{win.objectName()} is getting destroyed')
+                win.close()
+                win.deleteLater()
+        if cmds.workspaceControl('cwToolsWindowWorkspaceControl', q=True, exists=True):
+            cmds.deleteUI('cwToolsWindowWorkspaceControl', control=True)
 
-    #QtWidgets.QApplication(sys.argv)
     mayaMainWindowPtr = omui.MQtUtil.mainWindow()
     mayaMainWindow = wrapInstance(int(mayaMainWindowPtr), QtWidgets.QWidget)
     CWToolsMainUI.window = CWToolsMainUI(parent = mayaMainWindow)
     CWToolsMainUI.window.setObjectName('cwToolsWindow') # code above uses this to ID any existing windows
     CWToolsMainUI.window.show()
-    
+
+# deleteInstances()
 openWindow()

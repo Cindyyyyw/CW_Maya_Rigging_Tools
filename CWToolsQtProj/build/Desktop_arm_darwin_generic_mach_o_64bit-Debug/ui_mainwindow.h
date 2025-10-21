@@ -45,6 +45,17 @@ public:
     QPushButton *btn_sortSelection;
     QPushButton *btn_mergeCrv;
     QWidget *tab_2;
+    QVBoxLayout *verticalLayout_3;
+    QPushButton *btn_wireRig;
+    QPushButton *btn_twistJoint;
+    QPushButton *btn_locatorOnEdge;
+    QPushButton *btn_attachFlc;
+    QPushButton *btn_buildTwistJoint_3;
+    QPushButton *btn_buildTwistJoint_7;
+    QPushButton *btn_buildTwistJoint_8;
+    QPushButton *btn_buildTwistJoint_4;
+    QPushButton *btn_buildTwistJoint_6;
+    QPushButton *btn_buildTwistJoint_10;
     QWidget *tab_ctrl;
     QWidget *wgt_colorPicker;
     QGridLayout *gridLayout;
@@ -74,14 +85,14 @@ public:
     {
         if (MainWindow->objectName().isEmpty())
             MainWindow->setObjectName("MainWindow");
-        MainWindow->resize(300, 600);
+        MainWindow->resize(304, 600);
         QSizePolicy sizePolicy(QSizePolicy::Policy::Preferred, QSizePolicy::Policy::Preferred);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
         sizePolicy.setHeightForWidth(MainWindow->sizePolicy().hasHeightForWidth());
         MainWindow->setSizePolicy(sizePolicy);
         MainWindow->setMinimumSize(QSize(300, 600));
-        MainWindow->setMaximumSize(QSize(300, 600));
+        MainWindow->setMaximumSize(QSize(304, 600));
         centralwidget = new QWidget(MainWindow);
         centralwidget->setObjectName("centralwidget");
         verticalLayout_2 = new QVBoxLayout(centralwidget);
@@ -157,6 +168,88 @@ public:
         tabWidget->addTab(tab, QString());
         tab_2 = new QWidget();
         tab_2->setObjectName("tab_2");
+        verticalLayout_3 = new QVBoxLayout(tab_2);
+        verticalLayout_3->setObjectName("verticalLayout_3");
+        btn_wireRig = new QPushButton(tab_2);
+        btn_wireRig->setObjectName("btn_wireRig");
+        sizePolicy1.setHeightForWidth(btn_wireRig->sizePolicy().hasHeightForWidth());
+        btn_wireRig->setSizePolicy(sizePolicy1);
+        btn_wireRig->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_wireRig);
+
+        btn_twistJoint = new QPushButton(tab_2);
+        btn_twistJoint->setObjectName("btn_twistJoint");
+        sizePolicy1.setHeightForWidth(btn_twistJoint->sizePolicy().hasHeightForWidth());
+        btn_twistJoint->setSizePolicy(sizePolicy1);
+        btn_twistJoint->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_twistJoint);
+
+        btn_locatorOnEdge = new QPushButton(tab_2);
+        btn_locatorOnEdge->setObjectName("btn_locatorOnEdge");
+        sizePolicy1.setHeightForWidth(btn_locatorOnEdge->sizePolicy().hasHeightForWidth());
+        btn_locatorOnEdge->setSizePolicy(sizePolicy1);
+        btn_locatorOnEdge->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_locatorOnEdge);
+
+        btn_attachFlc = new QPushButton(tab_2);
+        btn_attachFlc->setObjectName("btn_attachFlc");
+        sizePolicy1.setHeightForWidth(btn_attachFlc->sizePolicy().hasHeightForWidth());
+        btn_attachFlc->setSizePolicy(sizePolicy1);
+        btn_attachFlc->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_attachFlc);
+
+        btn_buildTwistJoint_3 = new QPushButton(tab_2);
+        btn_buildTwistJoint_3->setObjectName("btn_buildTwistJoint_3");
+        sizePolicy1.setHeightForWidth(btn_buildTwistJoint_3->sizePolicy().hasHeightForWidth());
+        btn_buildTwistJoint_3->setSizePolicy(sizePolicy1);
+        btn_buildTwistJoint_3->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_buildTwistJoint_3);
+
+        btn_buildTwistJoint_7 = new QPushButton(tab_2);
+        btn_buildTwistJoint_7->setObjectName("btn_buildTwistJoint_7");
+        sizePolicy1.setHeightForWidth(btn_buildTwistJoint_7->sizePolicy().hasHeightForWidth());
+        btn_buildTwistJoint_7->setSizePolicy(sizePolicy1);
+        btn_buildTwistJoint_7->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_buildTwistJoint_7);
+
+        btn_buildTwistJoint_8 = new QPushButton(tab_2);
+        btn_buildTwistJoint_8->setObjectName("btn_buildTwistJoint_8");
+        sizePolicy1.setHeightForWidth(btn_buildTwistJoint_8->sizePolicy().hasHeightForWidth());
+        btn_buildTwistJoint_8->setSizePolicy(sizePolicy1);
+        btn_buildTwistJoint_8->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_buildTwistJoint_8);
+
+        btn_buildTwistJoint_4 = new QPushButton(tab_2);
+        btn_buildTwistJoint_4->setObjectName("btn_buildTwistJoint_4");
+        sizePolicy1.setHeightForWidth(btn_buildTwistJoint_4->sizePolicy().hasHeightForWidth());
+        btn_buildTwistJoint_4->setSizePolicy(sizePolicy1);
+        btn_buildTwistJoint_4->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_buildTwistJoint_4);
+
+        btn_buildTwistJoint_6 = new QPushButton(tab_2);
+        btn_buildTwistJoint_6->setObjectName("btn_buildTwistJoint_6");
+        sizePolicy1.setHeightForWidth(btn_buildTwistJoint_6->sizePolicy().hasHeightForWidth());
+        btn_buildTwistJoint_6->setSizePolicy(sizePolicy1);
+        btn_buildTwistJoint_6->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_buildTwistJoint_6);
+
+        btn_buildTwistJoint_10 = new QPushButton(tab_2);
+        btn_buildTwistJoint_10->setObjectName("btn_buildTwistJoint_10");
+        sizePolicy1.setHeightForWidth(btn_buildTwistJoint_10->sizePolicy().hasHeightForWidth());
+        btn_buildTwistJoint_10->setSizePolicy(sizePolicy1);
+        btn_buildTwistJoint_10->setLocale(QLocale(QLocale::English, QLocale::Canada));
+
+        verticalLayout_3->addWidget(btn_buildTwistJoint_10);
+
         tabWidget->addTab(tab_2, QString());
         tab_ctrl = new QWidget();
         tab_ctrl->setObjectName("tab_ctrl");
@@ -337,6 +430,16 @@ public:
         btn_sortSelection->setText(QCoreApplication::translate("MainWindow", "Sort selection in outliner", nullptr));
         btn_mergeCrv->setText(QCoreApplication::translate("MainWindow", "Merge curves", nullptr));
         tabWidget->setTabText(tabWidget->indexOf(tab), QCoreApplication::translate("MainWindow", "Utility", nullptr));
+        btn_wireRig->setText(QCoreApplication::translate("MainWindow", "Wire rig", nullptr));
+        btn_twistJoint->setText(QCoreApplication::translate("MainWindow", "Twist joint", nullptr));
+        btn_locatorOnEdge->setText(QCoreApplication::translate("MainWindow", "Locators along edge", nullptr));
+        btn_attachFlc->setText(QCoreApplication::translate("MainWindow", "Follicle from locator", nullptr));
+        btn_buildTwistJoint_3->setText(QCoreApplication::translate("MainWindow", "Squash stretch IK spline", nullptr));
+        btn_buildTwistJoint_7->setText(QCoreApplication::translate("MainWindow", "IK FK system", nullptr));
+        btn_buildTwistJoint_8->setText(QCoreApplication::translate("MainWindow", "Constrain joint", nullptr));
+        btn_buildTwistJoint_4->setText(QCoreApplication::translate("MainWindow", "Space switch", nullptr));
+        btn_buildTwistJoint_6->setText(QCoreApplication::translate("MainWindow", "Eyelid", nullptr));
+        btn_buildTwistJoint_10->setText(QCoreApplication::translate("MainWindow", "Reverse foot", nullptr));
         tabWidget->setTabText(tabWidget->indexOf(tab_2), QCoreApplication::translate("MainWindow", "Rigging", nullptr));
         btn_setCtrlColor->setText(QCoreApplication::translate("MainWindow", "Set color", nullptr));
         lbl_colorIndicator->setText(QString());

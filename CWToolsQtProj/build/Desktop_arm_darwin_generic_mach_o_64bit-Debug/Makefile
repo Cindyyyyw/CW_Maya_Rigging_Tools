@@ -327,7 +327,7 @@ include /Users/cindy/Qt/6.9.0/macos/mkspecs/features/mac/sdk.mk
 first: all
 ####### Build rules
 
-CWToolsQtProj.app/Contents/MacOS/CWToolsQtProj: ui_mainwindow.h ui_riggingTool_1.h $(OBJECTS)  
+CWToolsQtProj.app/Contents/MacOS/CWToolsQtProj: ui_inverseWeight.h ui_mainwindow.h ui_riggingTool_1.h $(OBJECTS)  
 	@test -d CWToolsQtProj.app/Contents/MacOS/ || mkdir -p CWToolsQtProj.app/Contents/MacOS/
 	$(LINK) $(LFLAGS) -o $(TARGET)  $(OBJECTS) $(OBJCOMP) $(LIBS)
 
@@ -862,7 +862,7 @@ distdir: FORCE
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents ../../mainwindow.h $(DISTDIR)/
 	$(COPY_FILE) --parents ../../main.cpp ../../mainwindow.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents ../../mainwindow.ui ../../riggingTool_1.ui $(DISTDIR)/
+	$(COPY_FILE) --parents ../../inverseWeight.ui ../../mainwindow.ui ../../riggingTool_1.ui $(DISTDIR)/
 
 
 clean: compiler_clean 
@@ -904,9 +904,13 @@ compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
 compiler_moc_source_make_all:
 compiler_moc_source_clean:
-compiler_uic_make_all: ui_mainwindow.h ui_riggingTool_1.h
+compiler_uic_make_all: ui_inverseWeight.h ui_mainwindow.h ui_riggingTool_1.h
 compiler_uic_clean:
-	-$(DEL_FILE) ui_mainwindow.h ui_riggingTool_1.h
+	-$(DEL_FILE) ui_inverseWeight.h ui_mainwindow.h ui_riggingTool_1.h
+ui_inverseWeight.h: ../../inverseWeight.ui \
+		/Users/cindy/Qt/6.9.0/macos/libexec/uic
+	/Users/cindy/Qt/6.9.0/macos/libexec/uic ../../inverseWeight.ui -o ui_inverseWeight.h
+
 ui_mainwindow.h: ../../mainwindow.ui \
 		/Users/cindy/Qt/6.9.0/macos/libexec/uic
 	/Users/cindy/Qt/6.9.0/macos/libexec/uic ../../mainwindow.ui -o ui_mainwindow.h

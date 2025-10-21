@@ -50,12 +50,13 @@ def move_flc_in_place(flc, u_value, v_value):
 def create_flc_on_mesh(num, mesh):
     flc_lis = []
     for j in range(num):
-        print(f'creating {mesh}_flc_{j}Shape')
-        flc_shape = cmds.createNode('follicle', name=f'{mesh}_flc_{j}Shape')
-        
+        # print(f'creating {mesh}_flc_{j}Shape')
+        flc_shape = cmds.createNode('follicle')
+        # print(flc_shape)
         flc_trans = cmds.listRelatives(flc_shape, parent=1)[0]
-        flc_trans = cmds.rename(flc_trans, f'{mesh}_flc_{j}')
-        
+        flc_trans = cmds.rename(flc_trans, f'{mesh}_flc_{j}', ignoreShape = 1)
+        flc_shape = cmds.rename(flc_shape, f'{mesh}_flc_{j}Shape')
+        # print(flc_trans)
         # Connect mesh shape to follicle input
         mesh_shape = cmds.listRelatives(mesh, shapes=1, type='mesh')[0]
         cmds.connectAttr(mesh_shape + ".outMesh", flc_shape + ".inputMesh", force=True)
@@ -88,5 +89,5 @@ def runFunc():
     i = 0
     for loc in loc_lis:
         [u, v] = get_closest_uv(mesh, loc)
-        move_flc_in_place(flc_lis[i], u, v, loc)
+        move_flc_in_place(flc_lis[i], u, v)
         i+=1

@@ -16,6 +16,7 @@ HEADERS += \
     mainwindow.h
 
 FORMS += \
+    inverseWeight.ui \
     mainwindow.ui \
     riggingTool_1.ui
 

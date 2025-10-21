@@ -43,5 +43,5 @@ def renameShapeNodes(sl_list = None):
         else:
             cmds.warning("{} is not a transform node.".format(obj))
 
-def run():
-    renameShapeNodes()
+def run(sl_list=None):
+    renameShapeNodes(sl_list)
