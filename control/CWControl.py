@@ -78,7 +78,7 @@ class CWControlManager:
         
         if zero_grp:
             buildZeroGrp([ctrl])
-        return ctrl
+        return ctrl_name
 
     def extractShape(self, curve_name: str, shape_name: str):
         print('extract shape')
