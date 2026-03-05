@@ -1,0 +1,8 @@
+For Personal Study Purpose
+FACS Information retrieved from : 
+- https://www.cs.cmu.edu/~face/facs.htm
+- https://melindaozel.com/facs-cheat-sheet/
+- https://www.innerbody.com/anatomy/muscular/head-neck
+
+
+There are 64 AU (action units), however anatomically there are 62 muscles of facial expressions
