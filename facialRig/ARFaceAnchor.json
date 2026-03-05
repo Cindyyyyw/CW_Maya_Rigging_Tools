@@ -1,0 +1,49 @@
+{
+  "ARFaceAnchor": {
+    "Eye": [
+      "EyeBlink_DIR_",
+      "EyeLookDown_DIR_",
+      "EyeLookIn_DIR_",
+      "EyeLookOut_DIR_",
+      "EyeLookUp_DIR_",
+      "EyeSquint_DIR_",
+      "EyeWide_DIR_"
+    ],
+    "Mouth": [
+      "MouthClose",
+      "MouthDimple_DIR_",
+      "MouthFrown_DIR_",
+      "MouthFunnel",
+      "Mouth_DIR_",
+      "MouthLowerDown_DIR_",
+      "MouthPress_DIR_",
+      "MouthPucker",
+      "MouthRollLower",
+      "MouthRollUpper",
+      "MouthShrugLower",
+      "MouthShrugUpper",
+      "MouthSmile_DIR_",
+      "MouthStretch_DIR_",
+      "MouthUpperUp_DIR_"
+    ],
+    "Jaw": [
+      "JawForward",
+      "Jaw_DIR_"
+    ],
+    "Eyebrow": [
+      "BrowDown_DIR_",
+      "BrowInnerUp",
+      "BrowOuterUp_DIR_"
+    ],
+    "Cheek": [
+      "CheekPuff",
+      "CheekSquint_DIR_"
+    ],
+    "Nose": [
+      "NoseSneer_DIR_"
+    ],
+    "Tongue": [
+      "TongueOut"
+    ]
+  }
+}
