@@ -182,24 +182,60 @@ def _prompt_enable_symmetry(carrier_name, edge_index):
     """Select the seam edge on the carrier and pause for the user to enable
     Topological Symmetry interactively (programmatic activation is unreliable).
 
+    Uses a non-modal QDialog driven by a local QEventLoop so Maya's viewport
+    stays fully interactive while the prompt is visible — the user can click
+    Mesh > Mirror > Topological Symmetry before clicking OK.
+
     Raises RuntimeError if the user cancels.
     """
     cmds.select(f'{carrier_name}.e[{edge_index}]', replace=True)
 
     parent = _maya_main_window()
-    msg = QtWidgets.QMessageBox(parent)
-    msg.setWindowTitle('Enable Topological Symmetry')
-    msg.setIcon(QtWidgets.QMessageBox.Information)
-    msg.setText(
+
+    dlg = QtWidgets.QDialog(parent)
+    dlg.setWindowTitle('Enable Topological Symmetry')
+    # Stay on top but NON-modal so Maya's viewport remains clickable
+    dlg.setWindowFlags(
+        QtCore.Qt.Dialog
+        | QtCore.Qt.WindowStaysOnTopHint
+    )
+    dlg.setWindowModality(QtCore.Qt.NonModal)
+
+    layout = QtWidgets.QVBoxLayout(dlg)
+    layout.setSpacing(10)
+
+    lbl = QtWidgets.QLabel(
         f'Edge <b>{carrier_name}.e[{edge_index}]</b> has been selected.<br><br>'
-        'Please enable <b>Topological Symmetry</b> now:<br>'
+        'Please enable <b>Topological Symmetry</b> in Maya:<br>'
         '<i>Mesh menu &rarr; Mirror &rarr; Topological Symmetry</i><br><br>'
         'Click <b>OK</b> once symmetry is active to start flipping.'
     )
-    msg.setStandardButtons(
-        QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel
-    )
-    if msg.exec_() != QtWidgets.QMessageBox.Ok:
+    lbl.setWordWrap(True)
+    layout.addWidget(lbl)
+
+    btn_row = QtWidgets.QHBoxLayout()
+    ok_btn     = QtWidgets.QPushButton('OK')
+    cancel_btn = QtWidgets.QPushButton('Cancel')
+    ok_btn.setDefault(True)
+    btn_row.addStretch()
+    btn_row.addWidget(ok_btn)
+    btn_row.addWidget(cancel_btn)
+    layout.addLayout(btn_row)
+
+    # A local event loop lets the dialog stay visible while Maya's viewport
+    # keeps processing events (menus, clicks, etc.).
+    confirmed = [False]
+    loop = QtCore.QEventLoop()
+
+    ok_btn.clicked.connect(lambda: [confirmed.__setitem__(0, True), loop.quit()])
+    cancel_btn.clicked.connect(loop.quit)
+    dlg.rejected.connect(loop.quit)
+
+    dlg.show()
+    loop.exec_()
+    dlg.close()
+
+    if not confirmed[0]:
         raise RuntimeError('flip_target: user cancelled symmetry setup.')
 
 
