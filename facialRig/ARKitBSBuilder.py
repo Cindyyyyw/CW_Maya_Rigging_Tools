@@ -204,92 +204,83 @@ def flip_target(base_mesh, target_meshes, axis='X',
     """
     results = []
 
-    # For asymmetric meshes the flip is driven by Maya's symmetricModelling
-    # tool (topological, seeded by the midline edge on the carrier).  Save the
-    # current state once so we can restore it cleanly after all targets are
-    # processed — symmetricModelling stays ON for the entire loop rather than
-    # being toggled on and off for every iteration.
-    if midline_edges:
-        prev_sym   = cmds.symmetricModelling(q=True, symmetry=True)
-        prev_about = cmds.symmetricModelling(q=True, about=True)
+    for target in target_meshes:
+        # Derive names from the find/replace strings
+        if find_str and find_str in target:
+            orig_name = target.replace(find_str, orig_replace)
+            flip_name = target.replace(find_str, flip_replace)
+        else:
+            orig_name = f'{target}_{orig_replace}'
+            flip_name = f'{target}_{flip_replace}'
 
-    try:
-        for target in target_meshes:
-            # Derive names from the find/replace strings
-            if find_str and find_str in target:
-                orig_name = target.replace(find_str, orig_replace)
-                flip_name = target.replace(find_str, flip_replace)
-            else:
-                orig_name = f'{target}_{orig_replace}'
-                flip_name = f'{target}_{flip_replace}'
+        # Keep a clean copy of the pre-flip mesh
+        orig = cmds.duplicate(target, n=orig_name)[0]
 
-            # Keep a clean copy of the pre-flip mesh
-            orig = cmds.duplicate(target, n=orig_name)[0]
+        # Create a clean temp carrier outside the undo queue so Ctrl+Z
+        # cannot resurface it after it is deleted below.
+        cmds.undoInfo(stateWithoutFlush=False)
+        try:
+            temp_carrier = cmds.duplicate(
+                base_mesh, n=base_mesh + '_flip_tmp'
+            )[0]
+            cmds.delete(temp_carrier, constructionHistory=True)
+            for attr in ('tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'):
+                cmds.setAttr(f'{temp_carrier}.{attr}', lock=False)
+        finally:
+            cmds.undoInfo(stateWithoutFlush=True)
 
-            # Create a clean temp carrier outside the undo queue so Ctrl+Z
-            # cannot resurface it after it is deleted below.
+        try:
+            if midline_edges:
+                # Asymmetric mesh: bake a topological symmetry cache into the
+                # carrier so that blendShape flipTarget (symmetrySpace=0) can
+                # find the per-vertex correspondence across the seam.
+                # polySymmetryCache reads the currently selected seam edge, so
+                # we follow the required sequence:
+                #   1. object → component/edge mode
+                #   2. select the seam edge (replace=True, no residual)
+                #   3. bake the cache
+                #   4. return to object mode
+                cmds.select(temp_carrier)
+                cmds.selectMode(component=True)
+                cmds.selectType(edge=True)
+                cmds.select(
+                    f'{temp_carrier}.e[{midline_edges[0]}]',
+                    replace=True,
+                )
+                cmds.polySymmetryCache(temp_carrier, cacheSymmetry=True)
+                cmds.selectMode(object=True)
+
+            # Apply the target as a blendShape on the temp carrier.
+            bs = cmds.blendShape(target, temp_carrier)[0]
+
+            # flipTarget=[mirrorAxis, targetIndex]
+            #   • First  value: mirror axis (0=X, 1=Y, 2=Z).
+            #   • Second value: TARGET INDEX — always 0 since the blendShape
+            #     is rebuilt from scratch each iteration.
+            # symmetrySpace:
+            #   • 0 (topological) for asymmetric meshes — uses the
+            #     polySymmetryCache baked above.
+            #   • 1 (object space) for symmetric meshes — no cache needed;
+            #     Maya mirrors the vertex offsets across the world axis.
+            sym_space = 0 if midline_edges else 1
+            flip_kwargs = dict(edit=True, flipTarget=[0, 0], symmetrySpace=sym_space)
+            cmds.blendShape(bs, **flip_kwargs)
+            cmds.setAttr(f'{bs}.weight[0]', 1.0)
+
+            flipped = cmds.duplicate(temp_carrier, n=flip_name)[0]
+            cmds.delete(flipped, constructionHistory=True)
+            cmds.delete(bs)
+        finally:
+            # Delete the temp carrier outside the undo queue for the same
+            # reason it was created there.
             cmds.undoInfo(stateWithoutFlush=False)
             try:
-                temp_carrier = cmds.duplicate(
-                    base_mesh, n=base_mesh + '_flip_tmp'
-                )[0]
-                cmds.delete(temp_carrier, constructionHistory=True)
-                for attr in ('tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'):
-                    cmds.setAttr(f'{temp_carrier}.{attr}', lock=False)
+                if cmds.objExists(temp_carrier):
+                    cmds.delete(temp_carrier)
             finally:
                 cmds.undoInfo(stateWithoutFlush=True)
 
-            try:
-                if midline_edges:
-                    # Mirror the interactive symmetry workflow so Maya can
-                    # prime its topology detection properly:
-                    #   1. select the object in object mode
-                    #   2. switch to component / edge mode
-                    #   3. select the specific seam edge (replace=True clears
-                    #      any residual selection)
-                    #   4. only then call symmetricModelling
-                    # Jumping straight to a component selection without this
-                    # sequence causes the "topology changed" warning.
-                    cmds.select(temp_carrier)
-                    cmds.selectMode(component=True)
-                    cmds.selectType(edge=True)
-                    cmds.select(
-                        f'{temp_carrier}.e[{midline_edges[0]}]',
-                        replace=True,
-                    )
-                    cmds.symmetricModelling(symmetry=True, about='topo')
-
-                # Apply the target as a blendShape on the temp carrier.
-                bs = cmds.blendShape(target, temp_carrier)[0]
-                # flipTarget=[mirrorAxis, targetIndex]
-                #   • Second value is the TARGET INDEX (always 0 — we start
-                #     fresh each iteration), NOT the axis index.
-                #   • symmetrySpace=0 → topological symmetry; for asymmetric
-                #     meshes the seam is established via symmetricModelling
-                #     above rather than a symmetryEdge flag.
-                flip_kwargs = dict(edit=True, flipTarget=[0, 0], symmetrySpace=0)
-                cmds.blendShape(bs, **flip_kwargs)
-                cmds.setAttr(f'{bs}.weight[0]', 1.0)
-
-                flipped = cmds.duplicate(temp_carrier, n=flip_name)[0]
-                cmds.delete(flipped, constructionHistory=True)
-                cmds.delete(bs)
-            finally:
-                # Delete the temp carrier outside the undo queue for the same
-                # reason it was created there.
-                cmds.undoInfo(stateWithoutFlush=False)
-                try:
-                    if cmds.objExists(temp_carrier):
-                        cmds.delete(temp_carrier)
-                finally:
-                    cmds.undoInfo(stateWithoutFlush=True)
-
-            results.extend([orig, flipped])
-    finally:
-        # Restore selection mode and symmetricModelling to their original state.
-        cmds.selectMode(object=True)
-        if midline_edges:
-            cmds.symmetricModelling(symmetry=prev_sym, about=prev_about)
+        results.extend([orig, flipped])
 
     return results
 
