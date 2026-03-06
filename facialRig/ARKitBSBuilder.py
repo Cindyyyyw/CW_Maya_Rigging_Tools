@@ -241,12 +241,18 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
             try:
                 if midline_edges:
-                    # symmetricModelling reads the active selection to determine
-                    # the symmetry seam, so the edge MUST be selected before
-                    # the call.  All carriers share the same topology as
-                    # base_mesh so the index is identical — only the mesh-name
-                    # prefix changes.  replace=True clears any residual
-                    # selection so nothing else is accidentally included.
+                    # Mirror the interactive symmetry workflow so Maya can
+                    # prime its topology detection properly:
+                    #   1. select the object in object mode
+                    #   2. switch to component / edge mode
+                    #   3. select the specific seam edge (replace=True clears
+                    #      any residual selection)
+                    #   4. only then call symmetricModelling
+                    # Jumping straight to a component selection without this
+                    # sequence causes the "topology changed" warning.
+                    cmds.select(temp_carrier)
+                    cmds.selectMode(component=True)
+                    cmds.selectType(edge=True)
                     cmds.select(
                         f'{temp_carrier}.e[{midline_edges[0]}]',
                         replace=True,
@@ -255,7 +261,6 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
                 # Apply the target as a blendShape on the temp carrier.
                 bs = cmds.blendShape(target, temp_carrier)[0]
-
                 # flipTarget=[mirrorAxis, targetIndex]
                 #   • Second value is the TARGET INDEX (always 0 — we start
                 #     fresh each iteration), NOT the axis index.
@@ -281,8 +286,8 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
             results.extend([orig, flipped])
     finally:
-        # Restore symmetricModelling to exactly the state it was in before
-        # this function was called.
+        # Restore selection mode and symmetricModelling to their original state.
+        cmds.selectMode(object=True)
         if midline_edges:
             cmds.symmetricModelling(symmetry=prev_sym, about=prev_about)
 
