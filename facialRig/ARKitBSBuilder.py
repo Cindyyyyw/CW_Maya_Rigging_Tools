@@ -240,7 +240,10 @@ def flip_target(base_mesh, target_meshes, axis='X',
             #     for the asymmetric case).
             flip_kwargs = dict(edit=True, flipTarget=[0, 0], symmetrySpace=0)
             if midline_edges:
-                flip_kwargs['symmetryEdge'] = midline_edges[0]
+                # symmetryEdge must reference the carrier, not the original
+                # base_mesh.  The topology is identical so the index is the
+                # same — only the mesh-name prefix needs to change.
+                flip_kwargs['symmetryEdge'] = f'{temp_carrier}.e[{midline_edges[0]}]'
             cmds.blendShape(bs, **flip_kwargs)
             cmds.setAttr(f'{bs}.weight[0]', 1.0)
 
