@@ -179,17 +179,13 @@ def check_symmetry(mesh, axis='X', tolerance=0.001):
 
 
 def _prompt_enable_symmetry(carrier_name, edge_index):
-    """Select the seam edge on the carrier and pause for the user to enable
-    Topological Symmetry interactively (programmatic activation is unreliable).
+    """Pause for the user to enable Topological Symmetry interactively.
 
     Uses a non-modal QDialog driven by a local QEventLoop so Maya's viewport
-    stays fully interactive while the prompt is visible — the user can click
-    Mesh > Mirror > Topological Symmetry before clicking OK.
+    stays fully interactive while the prompt is visible.
 
     Raises RuntimeError if the user cancels.
     """
-    cmds.select(f'{carrier_name}.e[{edge_index}]', replace=True)
-
     parent = _maya_main_window()
 
     dlg = QtWidgets.QDialog(parent)
@@ -205,10 +201,9 @@ def _prompt_enable_symmetry(carrier_name, edge_index):
     layout.setSpacing(10)
 
     lbl = QtWidgets.QLabel(
-        f'Edge <b>{carrier_name}.e[{edge_index}]</b> has been selected.<br><br>'
-        'Please enable <b>Topological Symmetry</b> in Maya:<br>'
-        '<i>Mesh menu &rarr; Mirror &rarr; Topological Symmetry</i><br><br>'
-        'Click <b>OK</b> once symmetry is active to start flipping.'
+        f'In the <b>top bar symmetry settings</b>, set the symmetry object '
+        f'to <b>{carrier_name}</b> and enable <b>Topological Symmetry</b>.<br><br>'
+        'Click <b>OK</b> once symmetry is active to continue.'
     )
     lbl.setWordWrap(True)
     layout.addWidget(lbl)
@@ -274,11 +269,11 @@ def flip_target(base_mesh, target_meshes, axis='X',
         cmds.undoInfo(stateWithoutFlush=True)
 
     try:
-        if midline_edges:
-            # For asymmetric meshes, topological symmetry must be enabled
-            # interactively.  Select the seam edge and ask the user to turn it
-            # on once — the state persists for every target in the loop below.
-            _prompt_enable_symmetry(temp_carrier, midline_edges[0])
+        # if midline_edges:
+        #     # For asymmetric meshes, topological symmetry must be enabled
+        #     # interactively.  Select the seam edge and ask the user to turn it
+        #     # on once — the state persists for every target in the loop below.
+        #     _prompt_enable_symmetry(temp_carrier, midline_edges[0])
 
         for target in target_meshes:
             # Derive names from the find/replace strings
@@ -289,11 +284,13 @@ def flip_target(base_mesh, target_meshes, axis='X',
                 orig_name = f'{target}_{orig_replace}'
                 flip_name = f'{target}_{flip_replace}'
 
-            # Keep a clean copy of the pre-flip mesh
+            # Keep a clean copy of the pre-flip mesh, parented to world
             orig = cmds.duplicate(target, n=orig_name)[0]
+            cmds.parent(orig, world=True)
 
             # Apply the target as a blendShape on the temp carrier.
             bs = cmds.blendShape(target, temp_carrier)[0]
+            cmds.setAttr(f'{bs}.weight[0]', 1.0)
 
             # flipTarget=[mirrorAxis, targetIndex]
             #   • First  value: mirror axis (0=X, 1=Y, 2=Z).
@@ -304,17 +301,22 @@ def flip_target(base_mesh, target_meshes, axis='X',
             #     enabled Topological Symmetry on the carrier above.
             #   • 1 (object space) — for symmetric meshes; mirrors vertex
             #     offsets across the world axis, no symmetry cache needed.
-            sym_space = 0 if midline_edges else 1
-            cmds.blendShape(bs, edit=True, flipTarget=[0, 0],
-                            symmetrySpace=sym_space)
-            cmds.setAttr(f'{bs}.weight[0]', 1.0)
+            if midline_edges:
+                sym_space = 0
+                _prompt_enable_symmetry(temp_carrier, midline_edges[0])
+                cmds.blendShape(bs, edit=True, flipTarget=[0, 0],
+                                symmetrySpace=sym_space)
+            else:
+                sym_space = 1
+                cmds.blendShape(bs, edit=True, flipTarget=[0, 0],
+                                symmetrySpace=sym_space)
 
             flipped = cmds.duplicate(temp_carrier, n=flip_name)[0]
+            cmds.parent(flipped, world=True)
             cmds.delete(flipped, constructionHistory=True)
             # Deleting the blendShape node returns temp_carrier to its clean
             # base shape, ready for the next target.
             cmds.delete(bs)
-
             results.extend([orig, flipped])
     finally:
         # Delete the carrier outside the undo queue for the same reason it
