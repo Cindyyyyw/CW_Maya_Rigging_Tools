@@ -241,11 +241,16 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
             try:
                 if midline_edges:
-                    # All carriers share the same topology as base_mesh so the
-                    # edge index is identical — just update the reference mesh.
-                    # This re-seeds symmetricModelling without toggling it off
-                    # between iterations.
-                    cmds.select(f'{temp_carrier}.e[{midline_edges[0]}]')
+                    # symmetricModelling reads the active selection to determine
+                    # the symmetry seam, so the edge MUST be selected before
+                    # the call.  All carriers share the same topology as
+                    # base_mesh so the index is identical — only the mesh-name
+                    # prefix changes.  replace=True clears any residual
+                    # selection so nothing else is accidentally included.
+                    cmds.select(
+                        f'{temp_carrier}.e[{midline_edges[0]}]',
+                        replace=True,
+                    )
                     cmds.symmetricModelling(symmetry=True, about='topo')
 
                 # Apply the target as a blendShape on the temp carrier.
