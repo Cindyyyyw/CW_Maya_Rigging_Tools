@@ -178,6 +178,31 @@ def check_symmetry(mesh, axis='X', tolerance=0.001):
     return len(asymmetric) == 0, midline
 
 
+def _prompt_enable_symmetry(carrier_name, edge_index):
+    """Select the seam edge on the carrier and pause for the user to enable
+    Topological Symmetry interactively (programmatic activation is unreliable).
+
+    Raises RuntimeError if the user cancels.
+    """
+    cmds.select(f'{carrier_name}.e[{edge_index}]', replace=True)
+
+    parent = _maya_main_window()
+    msg = QtWidgets.QMessageBox(parent)
+    msg.setWindowTitle('Enable Topological Symmetry')
+    msg.setIcon(QtWidgets.QMessageBox.Information)
+    msg.setText(
+        f'Edge <b>{carrier_name}.e[{edge_index}]</b> has been selected.<br><br>'
+        'Please enable <b>Topological Symmetry</b> now:<br>'
+        '<i>Mesh menu &rarr; Mirror &rarr; Topological Symmetry</i><br><br>'
+        'Click <b>OK</b> once symmetry is active to start flipping.'
+    )
+    msg.setStandardButtons(
+        QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel
+    )
+    if msg.exec_() != QtWidgets.QMessageBox.Ok:
+        raise RuntimeError('flip_target: user cancelled symmetry setup.')
+
+
 def flip_target(base_mesh, target_meshes, axis='X',
                 find_str='_DIR_', orig_replace='Left', flip_replace='Right',
                 midline_edges=None):
@@ -191,64 +216,45 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
     base_mesh and the original target meshes are left unmodified.
 
-    A fresh, history-free duplicate of base_mesh is used as the blendShape
-    carrier for every target so the flip has a clean slate and base_mesh
-    itself is never touched.  The carrier is created and destroyed outside
-    Maya's undo queue so Ctrl+Z cannot resurrect it.
-
-    Args:
-        midline_edges: list of edge indices on base_mesh that define the
-            symmetry seam.  Required for asymmetric meshes; the first edge
-            is passed to blendShape as symmetryEdge.  Pass None or [] for
-            symmetric meshes where topological symmetry alone is sufficient.
+    One temp carrier is created from base_mesh before the loop and reused
+    for all targets (each blendShape is deleted after evaluation, returning
+    the carrier to its clean base shape).  For asymmetric meshes the seam
+    edge is auto-selected and a dialog asks the user to enable Topological
+    Symmetry once before any targets are processed.
     """
     results = []
 
-    for target in target_meshes:
-        # Derive names from the find/replace strings
-        if find_str and find_str in target:
-            orig_name = target.replace(find_str, orig_replace)
-            flip_name = target.replace(find_str, flip_replace)
-        else:
-            orig_name = f'{target}_{orig_replace}'
-            flip_name = f'{target}_{flip_replace}'
+    # Create the single temp carrier outside the undo queue so Ctrl+Z cannot
+    # resurrect it.  It is reused for every target in the loop.
+    cmds.undoInfo(stateWithoutFlush=False)
+    try:
+        temp_carrier = cmds.duplicate(
+            base_mesh, n=base_mesh + '_flip_tmp'
+        )[0]
+        cmds.delete(temp_carrier, constructionHistory=True)
+        for attr in ('tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'):
+            cmds.setAttr(f'{temp_carrier}.{attr}', lock=False)
+    finally:
+        cmds.undoInfo(stateWithoutFlush=True)
 
-        # Keep a clean copy of the pre-flip mesh
-        orig = cmds.duplicate(target, n=orig_name)[0]
+    try:
+        if midline_edges:
+            # For asymmetric meshes, topological symmetry must be enabled
+            # interactively.  Select the seam edge and ask the user to turn it
+            # on once — the state persists for every target in the loop below.
+            _prompt_enable_symmetry(temp_carrier, midline_edges[0])
 
-        # Create a clean temp carrier outside the undo queue so Ctrl+Z
-        # cannot resurface it after it is deleted below.
-        cmds.undoInfo(stateWithoutFlush=False)
-        try:
-            temp_carrier = cmds.duplicate(
-                base_mesh, n=base_mesh + '_flip_tmp'
-            )[0]
-            cmds.delete(temp_carrier, constructionHistory=True)
-            for attr in ('tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'):
-                cmds.setAttr(f'{temp_carrier}.{attr}', lock=False)
-        finally:
-            cmds.undoInfo(stateWithoutFlush=True)
+        for target in target_meshes:
+            # Derive names from the find/replace strings
+            if find_str and find_str in target:
+                orig_name = target.replace(find_str, orig_replace)
+                flip_name = target.replace(find_str, flip_replace)
+            else:
+                orig_name = f'{target}_{orig_replace}'
+                flip_name = f'{target}_{flip_replace}'
 
-        try:
-            if midline_edges:
-                # Asymmetric mesh: bake a topological symmetry cache into the
-                # carrier so that blendShape flipTarget (symmetrySpace=0) can
-                # find the per-vertex correspondence across the seam.
-                # polySymmetryCache reads the currently selected seam edge, so
-                # we follow the required sequence:
-                #   1. object → component/edge mode
-                #   2. select the seam edge (replace=True, no residual)
-                #   3. bake the cache
-                #   4. return to object mode
-                cmds.select(temp_carrier)
-                cmds.selectMode(component=True)
-                cmds.selectType(edge=True)
-                cmds.select(
-                    f'{temp_carrier}.e[{midline_edges[0]}]',
-                    replace=True,
-                )
-                cmds.polySymmetryCache(temp_carrier, cacheSymmetry=True)
-                cmds.selectMode(object=True)
+            # Keep a clean copy of the pre-flip mesh
+            orig = cmds.duplicate(target, n=orig_name)[0]
 
             # Apply the target as a blendShape on the temp carrier.
             bs = cmds.blendShape(target, temp_carrier)[0]
@@ -258,29 +264,31 @@ def flip_target(base_mesh, target_meshes, axis='X',
             #   • Second value: TARGET INDEX — always 0 since the blendShape
             #     is rebuilt from scratch each iteration.
             # symmetrySpace:
-            #   • 0 (topological) for asymmetric meshes — uses the
-            #     polySymmetryCache baked above.
-            #   • 1 (object space) for symmetric meshes — no cache needed;
-            #     Maya mirrors the vertex offsets across the world axis.
+            #   • 0 (topological) — for asymmetric meshes where the user has
+            #     enabled Topological Symmetry on the carrier above.
+            #   • 1 (object space) — for symmetric meshes; mirrors vertex
+            #     offsets across the world axis, no symmetry cache needed.
             sym_space = 0 if midline_edges else 1
-            flip_kwargs = dict(edit=True, flipTarget=[0, 0], symmetrySpace=sym_space)
-            cmds.blendShape(bs, **flip_kwargs)
+            cmds.blendShape(bs, edit=True, flipTarget=[0, 0],
+                            symmetrySpace=sym_space)
             cmds.setAttr(f'{bs}.weight[0]', 1.0)
 
             flipped = cmds.duplicate(temp_carrier, n=flip_name)[0]
             cmds.delete(flipped, constructionHistory=True)
+            # Deleting the blendShape node returns temp_carrier to its clean
+            # base shape, ready for the next target.
             cmds.delete(bs)
-        finally:
-            # Delete the temp carrier outside the undo queue for the same
-            # reason it was created there.
-            cmds.undoInfo(stateWithoutFlush=False)
-            try:
-                if cmds.objExists(temp_carrier):
-                    cmds.delete(temp_carrier)
-            finally:
-                cmds.undoInfo(stateWithoutFlush=True)
 
-        results.extend([orig, flipped])
+            results.extend([orig, flipped])
+    finally:
+        # Delete the carrier outside the undo queue for the same reason it
+        # was created there.
+        cmds.undoInfo(stateWithoutFlush=False)
+        try:
+            if cmds.objExists(temp_carrier):
+                cmds.delete(temp_carrier)
+        finally:
+            cmds.undoInfo(stateWithoutFlush=True)
 
     return results
 
