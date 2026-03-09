@@ -286,8 +286,10 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
             # Keep a clean copy of the pre-flip mesh, parented to world
             orig = cmds.duplicate(target, n=orig_name)[0]
-            cmds.parent(orig, world=True)
-
+            try:
+                cmds.parent(orig, world=True)
+            except Exception as e:
+                print(e)
             # Apply the target as a blendShape on the temp carrier.
             bs = cmds.blendShape(target, temp_carrier)[0]
             cmds.setAttr(f'{bs}.weight[0]', 1.0)
@@ -312,7 +314,10 @@ def flip_target(base_mesh, target_meshes, axis='X',
                                 symmetrySpace=sym_space)
 
             flipped = cmds.duplicate(temp_carrier, n=flip_name)[0]
-            cmds.parent(flipped, world=True)
+            try:
+                cmds.parent(flipped, world=True)
+            except Exception as e:
+                print(e)
             cmds.delete(flipped, constructionHistory=True)
             # Deleting the blendShape node returns temp_carrier to its clean
             # base shape, ready for the next target.
@@ -332,7 +337,7 @@ def flip_target(base_mesh, target_meshes, axis='X',
 
 
 def split_by_weight_mask(base_mesh, target_meshes, axis='X',
-                          midline_vert_indices=None, tolerance=0.001):
+                          midline_vert_indices=None, find_str='_DIR_', tolerance=0.001):
     """Split each target into Left (+axis) and Right (-axis) duplicates.
 
     Each duplicate is a copy of *base_mesh* with the target applied as a
@@ -373,7 +378,11 @@ def split_by_weight_mask(base_mesh, target_meshes, axis='X',
             ('Left',  pos_verts, neg_verts),
             ('Right', neg_verts, pos_verts),
         ]:
-            dup = cmds.duplicate(base_mesh, n=f'{target}_{side}')[0]
+            if find_str and find_str in target:
+                dup_name = target.replace(find_str, side)
+            else:
+                dup_name = f'{target}_{side}'
+            dup = cmds.duplicate(base_mesh, n=dup_name)[0]
             bs  = cmds.blendShape(target, dup)[0]
             cmds.setAttr(f'{bs}.weight[0]', 1.0)
             _apply_weights(bs, primary, secondary)
