@@ -1,0 +1,36 @@
+{
+  "FacialMuscleJoints": {
+    "Brow": [
+      {
+        "name": "frontalisMedial",
+        "translate": [
+          8.756,
+          -11.6309,
+          0.042
+        ],
+        "rotate": [
+          90.0,
+          0.0,
+          5.7474
+        ]
+      },
+      {
+        "name": "frontalisLateral_DIR_",
+        "translate": [
+          8.6616,
+          -10.8256,
+          -4.6173
+        ],
+        "rotate": [
+          109.8002,
+          -9.8559,
+          19.8875
+        ]
+      }
+    ],
+    "Cheek": [],
+    "Nose": [],
+    "Lip": [],
+    "Chin": []
+  }
+}
