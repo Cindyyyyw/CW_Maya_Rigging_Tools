@@ -8,20 +8,24 @@ WORKFLOW  (follow phases in order)
   PREP      Generate start curves from poly edges, rebuild & reverse utilities.
   PHASE 1   Build IK-spline joint chains from selected start curves.
   ── PAUSE ── Simulate, review, return to frame 1.
-  PHASE 2   Make dyna curves dynamic, attach follicles, set hair system attrs.
-  PHASE 3   (Optional) Create skinCluster + import ngSkinTools2 weight data.
+  PHASE 2   Make dyna curves dynamic; build dual blendShapes (output_crv +
+            start_crv) and a nucleus condition node to switch between them.
+  PHASE 3   Wire the temp joint rig — blendMatrix/multMatrix so the joint
+            tracks the 'Main' controller when simulation is active.
+  PHASE 4   (Optional) Create skinCluster + import ngSkinTools2 weight data.
+  PHASE 5   Build FK controller layer on top of the IK joint chains.
 
 HARD PREREQUISITES (scene must have these before running)
 ──────────────────────────────────────────────────────────
   • bonesOnCurve MEL proc available (ships with Maya Rigging tools).
   • A clean, single-sided proxy mesh for follicle attachment (named in UI).
-  • Optional: a joint named  temp_hair_jnt  used as IK-twist world-up object.
-  • Optional: ngSkinTools2 plugin loaded (for Phase 3 weight import).
+  • A controller named 'Main' in the scene (required for Phase 3).
+  • Optional: a joint for IK-twist world-up (set in Global Settings).
+  • Optional: ngSkinTools2 plugin loaded (for Phase 4 weight import).
 
-NAMING CONVENTION (auto-generated from UI fields)
-──────────────────────────────────────────────────
-  Full name = "{Section}_{BaseName}"  e.g.  "F_Hair"
-           or "{BaseName}"             e.g.  "Hair"   (if no section)
+NAMING CONVENTION (auto-generated from the Base Name UI field)
+──────────────────────────────────────────────────────────────
+  Full name = Base Name  (e.g.  "Hair"  or  "F_Hair"  or  "Tail")
 
   Start curves must contain "start" in their name, e.g.:
       hair_start_crv_1
@@ -70,11 +74,9 @@ _COL_RED    = (0.48, 0.28, 0.28)
 # HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _full_name(base_ctrl, section_ctrl):
-    """Read UI controls and compose the full hair identifier."""
-    base    = cmds.textFieldGrp(base_ctrl,    q=True, text=True).strip() or 'Hair'
-    section = cmds.textFieldGrp(section_ctrl, q=True, text=True).strip()
-    return f'{section}_{base}' if section else base
+def _get_name(base_ctrl):
+    """Read the Base Name UI field and return the hair identifier."""
+    return cmds.textFieldGrp(base_ctrl, q=True, text=True).strip() or 'Hair'
 
 
 def _latest_hair_system_shape():
@@ -108,6 +110,31 @@ def _load(key):
 def _msg(text, pos='midCenter'):
     """Show a brief in-viewport message."""
     cmds.inViewMessage(amg=text, pos=pos, fade=True, fst=3500)
+
+
+def _get_matrix(attr):
+    """Return a matrix attribute as a flat list of 16 floats.
+
+    cmds.getAttr on matrix-type attributes returns a list containing
+    one tuple of 16 elements: [(m00, m01, ..., m33)].
+    """
+    val = cmds.getAttr(attr)
+    if val and hasattr(val[0], '__iter__'):
+        return list(val[0])
+    return list(val)
+
+
+def _mat4_mult(a, b):
+    """Multiply two 4×4 matrices stored as 16-element flat lists (row-major).
+
+    Compatible with the output of _get_matrix().
+    """
+    result = [0.0] * 16
+    for row in range(4):
+        for col in range(4):
+            for k in range(4):
+                result[row * 4 + col] += a[row * 4 + k] * b[k * 4 + col]
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -184,8 +211,16 @@ def run_phase1(full_name, head_joint=''):
       • Rename joints  {base}_jnt_1 … _jnt_7  and  {base}_ikHandle
       • Duplicate original  → dyna_crv  (left at world root for Phase 2)
 
-    If head_joint is supplied and exists, the IK joint group is matched
-    to it (same as the FK master group) so both layers share the same root.
+    IK joint group positioning
+    ───────────────────────────
+    If head_joint is supplied a blendMatrix node ({full_name}_ik_jnt_grp_bm)
+    drives the group's offsetParentMatrix:
+      • inputMatrix  = static snapshot of head_joint.worldMatrix at build time
+      • target[0].targetMatrix  ← live head_joint.worldMatrix[0]
+      • target[0].weight  = 0 at build time (connected to nucleus_cond.outColorR
+                             by Phase 2 once the condition node exists)
+    When weight=0 (sim OFF): group sits at the static captured position.
+    When weight=1 (sim ON):  group tracks head_joint live.
 
     Persists ik_hdl_lis / ik_crv_lis / dyna_crv_lis via optionVars.
     """
@@ -194,13 +229,32 @@ def run_phase1(full_name, head_joint=''):
         cmds.error('[Hair Rig] Nothing selected. Select all start curves first.')
         return
 
-    # Organiser groups
+    # ── IK joint group + optional blendMatrix positioning ─────────────────────
     jnt_grp = cmds.group(em=True, w=True, name=f'{full_name}_ik_jnt_grp')
+
     if head_joint and cmds.objExists(head_joint):
-        cmds.matchTransform(jnt_grp, head_joint, pos=True, rot=True, scl=False)
+        # Snapshot head joint's current world matrix (static, not a live conn)
+        static_mtx = _get_matrix(f'{head_joint}.worldMatrix[0]')
+
+        bm_name = f'{full_name}_ik_jnt_grp_bm'
+        if cmds.objExists(bm_name):
+            cmds.delete(bm_name)
+        bm = cmds.createNode('blendMatrix', name=bm_name)
+
+        # inputMatrix = static rest position
+        cmds.setAttr(f'{bm}.inputMatrix', *static_mtx, type='matrix')
+        # target[0].targetMatrix = live feed from head joint
+        cmds.connectAttr(f'{head_joint}.worldMatrix[0]',
+                         f'{bm}.target[0].targetMatrix')
+        # weight left at 0 (default) — Phase 2 will wire nucleus_cond.outColorR
+
+        # Drive jnt_grp's offsetParentMatrix; local TRS stays at identity
+        cmds.connectAttr(f'{bm}.outputMatrix', f'{jnt_grp}.offsetParentMatrix')
+
     elif head_joint:
         cmds.warning(f'[Hair Rig] Head joint "{head_joint}" not found — '
                      'IK joint group left at world origin.')
+
     crv_grp = cmds.group(em=True, w=True, name=f'{full_name}_ik_crv_grp')
     hdl_grp = cmds.group(em=True, w=True, name=f'{full_name}_ik_hdl_grp')
 
@@ -244,8 +298,8 @@ def run_phase1(full_name, head_joint=''):
         dyna_crv_lis.append(dyna_crv)
 
     # Persist for Phase 2
-    _store('_hairRig_ik_hdl',  ik_hdl_lis)
-    _store('_hairRig_ik_crv',  ik_crv_lis)
+    _store('_hairRig_ik_hdl',   ik_hdl_lis)
+    _store('_hairRig_ik_crv',   ik_crv_lis)
     _store('_hairRig_dyna_crv', dyna_crv_lis)
 
     _msg('<hl>Phase 1 complete!</hl>  '
@@ -257,12 +311,26 @@ def run_phase1(full_name, head_joint=''):
 # PHASE 2  —  DYNAMIC HAIR + FOLLICLE SETUP
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_phase2(proxy_mesh, full_name):
+def run_phase2(proxy_mesh, full_name, temp_jnt=''):
     """
-    Make dyna curves dynamic, rename outputs + follicles, create blendShapes,
-    configure hair system attributes, and wire IK twist control.
+    Make dyna curves dynamic, rename outputs + follicles, build dual blendShapes
+    (output_crv + start_crv), create a nucleus condition node, configure hair
+    system attributes, and wire IK twist control.
+
+    BlendShape layout (per IK curve)
+    ─────────────────────────────────
+      Target 0  output_crv  ←  weight[0]  driven by  nucleus_cond.outColorR
+      Target 1  start_crv   ←  weight[1]  driven by  nucleus_cond.outColorG
+
+    Nucleus condition logic
+    ────────────────────────
+      nucleus.enable == 0  (sim OFF)  →  outColorR=0, outColorG=1
+                                         → start_crv drives IK curve (static pose)
+      nucleus.enable == 1  (sim ON)   →  outColorR=1, outColorG=0
+                                         → output_crv drives IK curve (dynamic pose)
 
     Reads the curve / handle lists stored by Phase 1.
+    Stores the condition node name for Phase 3 via optionVar.
     """
     ik_hdl_lis   = _load('_hairRig_ik_hdl')
     ik_crv_lis   = _load('_hairRig_ik_crv')
@@ -284,6 +352,9 @@ def run_phase2(proxy_mesh, full_name):
     mel.eval('makeCurvesDynamic 2 { "1", "0", "1", "1", "0"};')
 
     # ── Rename outputs / follicles, build blendShapes ─────────────────────────
+    # Each entry in bs_lis is (blendShape_node, has_start_crv_flag)
+    bs_lis = []
+
     for i, dyna_crv in enumerate(dyna_crv_lis):
         output_crv = cmds.rename(f'curve{i + 1}',
                                  dyna_crv.replace('dyna', 'output'))
@@ -294,8 +365,22 @@ def run_phase2(proxy_mesh, full_name):
         cmds.setAttr(f'{flc}.startDirection', 1)   # start from curve
         cmds.setAttr(f'{flc}.pointLock',      1)   # lock root to surface
 
-        # Dynamic output curve  →  drives IK curve via blendShape
-        cmds.blendShape(output_crv, ik_crv_lis[i], w=[(0, 1)])
+        # Build blendShape with output_crv and start_crv both as targets
+        start_crv  = dyna_crv.replace('dyna', 'start')
+        has_start  = cmds.objExists(start_crv)
+
+        if has_start:
+            # Target 0 = output_crv (weight 1), Target 1 = start_crv (weight 0)
+            bs = cmds.blendShape(
+                output_crv, start_crv, ik_crv_lis[i],
+                w=[(0, 1), (1, 0)])[0]
+        else:
+            cmds.warning(
+                f'[Hair Rig] Start curve "{start_crv}" not found — '
+                'using output curve only for this chain.')
+            bs = cmds.blendShape(output_crv, ik_crv_lis[i], w=[(0, 1)])[0]
+
+        bs_lis.append((bs, has_start))
 
     # ── Hair system defaults ──────────────────────────────────────────────────
     hss = _latest_hair_system_shape()
@@ -307,24 +392,177 @@ def run_phase2(proxy_mesh, full_name):
         cmds.setAttr(f'{hss}.attractionScale[2].attractionScale_Interp',      3)
         cmds.setAttr(f'{hss}.startCurveAttract', 1)
 
-    # ── IK twist control (optional — needs temp_hair_jnt) ─────────────────────
-    if cmds.objExists('temp_hair_jnt'):
+        # ── Nucleus condition node ────────────────────────────────────────────
+        nucleus_list = cmds.listConnections(hss, type='nucleus') or []
+        if nucleus_list:
+            nucleus   = nucleus_list[0]
+            cond_name = f'{full_name}_nucleus_cond'
+
+            if not cmds.objExists(cond_name):
+                cond = cmds.createNode('condition', name=cond_name)
+            else:
+                cond = cond_name
+
+            # operation=0 → Equal: firstTerm == secondTerm → colorIfTrue
+            cmds.setAttr(f'{cond}.operation',     0)   # Equal
+            cmds.setAttr(f'{cond}.secondTerm',    0.0)
+
+            # nucleus.enable == 0 (sim OFF) → colorIfTrue → outR=0, outG=1
+            cmds.setAttr(f'{cond}.colorIfTrueR',  0.0)
+            cmds.setAttr(f'{cond}.colorIfTrueG',  1.0)
+            cmds.setAttr(f'{cond}.colorIfTrueB',  0.0)
+
+            # nucleus.enable == 1 (sim ON)  → colorIfFalse → outR=1, outG=0
+            cmds.setAttr(f'{cond}.colorIfFalseR', 1.0)
+            cmds.setAttr(f'{cond}.colorIfFalseG', 0.0)
+            cmds.setAttr(f'{cond}.colorIfFalseB', 1.0)
+
+            cmds.connectAttr(f'{nucleus}.enable', f'{cond}.firstTerm',
+                             force=True)
+
+            # Persist condition node name for Phase 3
+            cmds.optionVar(sv=('_hairRig_cond_node', cond_name))
+
+            # Wire condition outputs to every blendShape
+            for bs, has_start in bs_lis:
+                cmds.connectAttr(f'{cond}.outColorR', f'{bs}.weight[0]',
+                                 force=True)
+                if has_start:
+                    cmds.connectAttr(f'{cond}.outColorG', f'{bs}.weight[1]',
+                                     force=True)
+
+            # Also wire IK joint group blendMatrix (created in Phase 1)
+            # so the group tracks head_joint live when physics is active.
+            ik_jnt_grp_bm = f'{full_name}_ik_jnt_grp_bm'
+            if cmds.objExists(ik_jnt_grp_bm):
+                cmds.connectAttr(f'{cond}.outColorR',
+                                 f'{ik_jnt_grp_bm}.target[0].weight',
+                                 force=True)
+                print(f'[Hair Rig] IK joint group blendMatrix weight wired: '
+                      f'{ik_jnt_grp_bm}')
+
+            print(f'[Hair Rig] Nucleus condition node created: {cond_name}')
+        else:
+            cmds.warning(
+                '[Hair Rig] No nucleus found connected to hair system — '
+                'condition node skipped.')
+
+    # ── IK twist control ──────────────────────────────────────────────────────
+    if temp_jnt and cmds.objExists(temp_jnt):
         for hdl in ik_hdl_lis:
             cmds.setAttr(f'{hdl}.dTwistControlEnable', 1)
             cmds.setAttr(f'{hdl}.dWorldUpType',        1)
-            cmds.connectAttr('temp_hair_jnt.worldMatrix[0]',
+            cmds.connectAttr(f'{temp_jnt}.worldMatrix[0]',
                              f'{hdl}.dWorldUpMatrix', force=True)
-    else:
+    elif temp_jnt:
         cmds.warning(
-            '[Hair Rig] "temp_hair_jnt" not found — IK twist control skipped. '
-            'Create a joint with that name if twist control is needed.')
+            f'[Hair Rig] Temp joint "{temp_jnt}" not found — '
+            'IK twist control skipped. Run Phase 3 after creating the joint, '
+            'or wire it manually.')
 
-    _msg('<hl>Phase 2 complete!</hl>  Dynamic hair is live.  Run Phase 3 for skinning.')
+    _msg('<hl>Phase 2 complete!</hl>  '
+         'Dynamic hair is live.  Run Phase 3 to wire the temp joint rig.')
     print('[Hair Rig] Phase 2 complete.')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PHASE 3  —  SKIN WEIGHTS  (optional)
+# PHASE 3  —  TEMP JOINT RIG
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_temp_jnt_rig(temp_jnt, full_name):
+    """
+    Wire the temp joint (IK-twist world-up object) so it tracks the 'Main'
+    controller when the nucleus simulation is active.
+
+    Node network
+    ─────────────
+    blendMatrix  ({full_name}_temp_jnt_bm)
+      .inputMatrix              = static relative matrix  (rest / sim-off pose)
+      .target[0].targetMatrix  ←  multMatrix.matrixSum
+      .target[0].weight        ←  {full_name}_nucleus_cond.outColorR
+      .outputMatrix            →  temp_jnt.offsetParentMatrix
+
+    multMatrix  ({full_name}_temp_jnt_mm)
+      .matrixIn[0]   = static relative matrix  (same value as bm.inputMatrix)
+      .matrixIn[1]  ←  Main.worldMatrix[0]
+      .matrixSum    →  bm.target[0].targetMatrix
+
+    Relative matrix
+    ───────────────
+      relative_mtx = temp_jnt.worldMatrix × Main.worldInverseMatrix
+      This stores temp_jnt's position in Main's local space.
+
+    Condition logic (created in Phase 2)
+    ──────────────────────────────────────
+      nucleus.enable == 0  →  outColorR = 0  →  bm weight = 0
+                               →  offsetParentMatrix = static relative_mtx
+      nucleus.enable == 1  →  outColorR = 1  →  bm weight = 1
+                               →  offsetParentMatrix = relative_mtx × Main.wm
+                               →  temp_jnt tracks Main's current world position
+    """
+    if not cmds.objExists(temp_jnt):
+        cmds.error(f'[Hair Rig] Temp joint "{temp_jnt}" not found in scene.')
+        return
+
+    if not cmds.objExists('Main'):
+        cmds.error(
+            '[Hair Rig] Controller "Main" not found in scene. '
+            'Phase 3 requires a controller named exactly "Main".')
+        return
+
+    # ── Parent temp_jnt to world if needed ────────────────────────────────────
+    if cmds.listRelatives(temp_jnt, parent=True):
+        cmds.parent(temp_jnt, w=True)
+
+    # ── Compute relative matrix ───────────────────────────────────────────────
+    jnt_world    = _get_matrix(f'{temp_jnt}.worldMatrix[0]')
+    main_inv     = _get_matrix('Main.worldInverseMatrix[0]')
+    relative_mtx = _mat4_mult(jnt_world, main_inv)
+
+    # ── blendMatrix ───────────────────────────────────────────────────────────
+    bm_name = f'{full_name}_temp_jnt_bm'
+    if cmds.objExists(bm_name):
+        cmds.delete(bm_name)
+    bm = cmds.createNode('blendMatrix', name=bm_name)
+    cmds.setAttr(f'{bm}.inputMatrix', *relative_mtx, type='matrix')
+
+    # ── multMatrix ────────────────────────────────────────────────────────────
+    mm_name = f'{full_name}_temp_jnt_mm'
+    if cmds.objExists(mm_name):
+        cmds.delete(mm_name)
+    mm = cmds.createNode('multMatrix', name=mm_name)
+    cmds.setAttr(f'{mm}.matrixIn[0]', *relative_mtx, type='matrix')
+    cmds.connectAttr('Main.worldMatrix[0]', f'{mm}.matrixIn[1]')
+
+    # multMatrix output → blendMatrix target
+    cmds.connectAttr(f'{mm}.matrixSum', f'{bm}.target[0].targetMatrix')
+
+    # ── Connect condition outColorR → blend weight ────────────────────────────
+    cond_node = ''
+    if cmds.optionVar(exists='_hairRig_cond_node'):
+        cond_node = cmds.optionVar(q='_hairRig_cond_node')
+
+    if cond_node and cmds.objExists(cond_node):
+        cmds.connectAttr(f'{cond_node}.outColorR',
+                         f'{bm}.target[0].weight', force=True)
+    else:
+        cmds.warning(
+            '[Hair Rig] Nucleus condition node not found — '
+            'blendMatrix weight not connected. Run Phase 2 first.')
+
+    # ── Zero local transform; drive from blendMatrix output ───────────────────
+    cmds.setAttr(f'{temp_jnt}.translate', 0.0, 0.0, 0.0, type='double3')
+    cmds.setAttr(f'{temp_jnt}.rotate',    0.0, 0.0, 0.0, type='double3')
+    cmds.connectAttr(f'{bm}.outputMatrix',
+                     f'{temp_jnt}.offsetParentMatrix', force=True)
+
+    _msg('<hl>Phase 3 complete!</hl>  '
+         'Temp joint rig wired.  Run Phase 4 for skin weights.')
+    print('[Hair Rig] Phase 3 (Temp Joint Rig) complete.')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 4  —  SKIN WEIGHTS  (optional)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _find_latest_ngskin_file(directory, prefix):
@@ -345,23 +583,24 @@ def _find_latest_ngskin_file(directory, prefix):
     return matches[0]
 
 
-def run_phase3(full_name, use_ngskin, ngskin_path):
+def run_phase4(full_name, use_ngskin, ngskin_path, temp_jnt=''):
     """
     Create a skinCluster on the hair mesh using IK joints from Phase 1.
-    Optionally import the newest matching ngSkinTools2 .json weight file.
+    If temp_jnt is provided and exists, it is added as an influence.
+    Optionally imports the newest matching ngSkinTools2 .json weight file.
     """
     hair_mesh = full_name   # e.g. 'F_Hair'  or  'Hair'
 
     if not cmds.objExists(hair_mesh):
         cmds.warning(
             f'[Hair Rig] Hair mesh "{hair_mesh}" not found. '
-            'Check Base Name / Section in Global Settings.')
+            'Check Base Name in Global Settings.')
         return
 
     # Gather IK joints
     jnt_lis = cmds.ls(f'{full_name}_ik_*_jnt_*') or []
-    if cmds.objExists('temp_hair_jnt'):
-        jnt_lis.append('temp_hair_jnt')
+    if temp_jnt and cmds.objExists(temp_jnt):
+        jnt_lis.append(temp_jnt)
 
     if not jnt_lis:
         cmds.warning(
@@ -404,12 +643,12 @@ def run_phase3(full_name, use_ngskin, ngskin_path):
                     f'[Hair Rig] No matching .json found in "{ngskin_path}" '
                     f'for "{full_name}".')
 
-    _msg('<hl>Phase 3 complete!</hl>  Hair rig setup finished.')
-    print('[Hair Rig] Phase 3 complete.')
+    _msg('<hl>Phase 4 complete!</hl>  Skin weights applied.')
+    print('[Hair Rig] Phase 4 complete.')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PHASE 4  —  FK CONTROLLER LAYER
+# PHASE 5  —  FK CONTROLLER LAYER
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_fk_layer(full_name, head_joint, ctrl_scale):
@@ -419,9 +658,11 @@ def build_fk_layer(full_name, head_joint, ctrl_scale):
 
     Hierarchy per IK chain
     ──────────────────────
-    {full_name}_fk_master_grp          (matched to head_joint)
-      └─ {chain}_fk_offset_1_grp      (offsetParentMatrix via multMatrix)
-           └─ {chain}_fk_ctrl_1       (nurbsCircle, local = identity)
+    {full_name}_fk_master_grp          (matched to head_joint, then live
+    │                                   parentConstraint ← head_joint)
+      └─ {chain}_fk_offset_1_grp      position: matchTransform to IK jnt 1
+           │                           rotate:   decomposeMatrix ← IK_jnt_1.matrix
+           └─ {chain}_fk_ctrl_1       (nurbsCircle, add FK offsets here)
                 └─ {chain}_fk_offset_2_grp
                      └─ {chain}_fk_ctrl_2
                           └─ ...
@@ -429,13 +670,17 @@ def build_fk_layer(full_name, head_joint, ctrl_scale):
     FK joints live in a separate chain under {full_name}_fk_jnt_grp.
     Each FK joint is parent-constrained (mo=True) to its FK controller.
 
-    offsetParentMatrix
-    ──────────────────
-    Each FK offset group's offsetParentMatrix is driven directly by the
-    corresponding IK joint's DAG local matrix (.matrix attribute).
-    Because .matrix is the joint's transform relative to its own IK parent,
-    the FK offset groups naturally read the IK chain's local pose at each
-    level — no extra utility nodes required.
+    FK master group tracking
+    ─────────────────────────
+    master_grp is first matched to head_joint (zero offset), then a
+    parentConstraint(head_joint, master_grp, mo=True) is applied so the
+    entire FK layer follows the character's head movement live.
+
+    Rotation via decomposeMatrix
+    ─────────────────────────────
+    Each FK offset group's rotation is driven by a decomposeMatrix node that
+    reads the corresponding IK joint's DAG local matrix (.matrix).  The position
+    is baked at build time via matchTransform so no offsetParentMatrix is needed.
     """
     # ── Validate ──────────────────────────────────────────────────────────────
     if not cmds.objExists(head_joint):
@@ -452,7 +697,9 @@ def build_fk_layer(full_name, head_joint, ctrl_scale):
     if cmds.objExists(master_name):
         cmds.delete(master_name)
     master_grp = cmds.group(em=True, w=True, name=master_name)
+    # Match first so the constraint has zero offset, then constrain live
     cmds.matchTransform(master_grp, head_joint, pos=True, rot=True, scl=False)
+    cmds.parentConstraint(head_joint, master_grp, mo=True)
 
     # ── FK joint group ────────────────────────────────────────────────────────
     fk_jnt_grp_name = f'{full_name}_fk_jnt_grp'
@@ -493,27 +740,32 @@ def build_fk_layer(full_name, head_joint, ctrl_scale):
         cmds.parent(fk_jnt_list[0], fk_jnt_grp)
 
         # ── Build FK controller + offset group nested chain ───────────────────
-        parent_node = master_grp   # FK offset group 1 lives under master
+        parent_node = master_grp   # offset group 1 lives directly under master
 
         for j, ik_jnt in valid_joints:
             fk_jnt          = f'{fk_base}_jnt_{j}'
             offset_grp_name = f'{fk_base}_offset_{j}_grp'
             ctrl_name       = f'{fk_base}_ctrl_{j}'
+            dm_name         = f'{fk_base}_offset_{j}_dm'
 
-            # FK offset group — created at world origin, parented with
-            # relative=True so its local transforms stay at zero.
+            # FK offset group — match world position to IK joint, then parent.
+            # Using default (non-relative) parent so world position is preserved
+            # as local translate within parent_node.
             offset_grp = cmds.group(em=True, w=True, name=offset_grp_name)
-            cmds.parent(offset_grp, parent_node, relative=True)
+            cmds.matchTransform(offset_grp, ik_jnt, pos=True, rot=False, scl=False)
+            cmds.parent(offset_grp, parent_node)
 
-            # Connect the IK joint's DAG local matrix directly.
-            # .matrix is the joint's local transform matrix (relative to its
-            # own parent in the IK chain), so the offset groups naturally
-            # chain through the hierarchy without any extra nodes.
-            cmds.connectAttr(f'{ik_jnt}.matrix',
-                             f'{offset_grp}.offsetParentMatrix')
+            # Wire rotation via decomposeMatrix reading the IK joint's local
+            # matrix (.matrix = transform relative to its own IK parent).
+            # Zero the local rotate first so the decomposeMatrix drives cleanly.
+            if cmds.objExists(dm_name):
+                cmds.delete(dm_name)
+            dm = cmds.createNode('decomposeMatrix', name=dm_name)
+            cmds.connectAttr(f'{ik_jnt}.matrix', f'{dm}.inputMatrix')
+            cmds.setAttr(f'{offset_grp}.rotate', 0.0, 0.0, 0.0, type='double3')
+            cmds.connectAttr(f'{dm}.outputRotate', f'{offset_grp}.rotate')
 
             # FK controller — default nurbsCircle, no construction history.
-            # Parented relative so its local transform is identity (zero).
             cmds.select(clear=True)
             ctrl = cmds.circle(name=ctrl_name, r=ctrl_scale, ch=False)[0]
             cmds.parent(ctrl, offset_grp, relative=True)
@@ -527,8 +779,8 @@ def build_fk_layer(full_name, head_joint, ctrl_scale):
 
         total_chains += 1
 
-    _msg(f'<hl>Phase 4 complete!</hl>  FK layer built for {total_chains} chain(s).')
-    print(f'[Hair Rig] Phase 4 (FK Layer) complete — {total_chains} chain(s).')
+    _msg(f'<hl>Phase 5 complete!</hl>  FK layer built for {total_chains} chain(s).')
+    print(f'[Hair Rig] Phase 5 (FK Layer) complete — {total_chains} chain(s).')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -560,7 +812,7 @@ def build_ui():
     win = cmds.window(
         _WIN_ID,
         title='Hair Rig Setup',
-        widthHeight=(_WIN_W, 1060),
+        widthHeight=(_WIN_W, 1200),
         sizeable=True,
     )
 
@@ -571,7 +823,7 @@ def build_ui():
     _sep(6, 'none')
     cmds.text(label='Hair Rig Setup', font='boldLabelFont', align='center')
     cmds.text(
-        label='Follow PREP → Phase 1 → PAUSE → Phase 2 → Phase 3.',
+        label='Follow PREP → Phase 1 → PAUSE → Phase 2 → Phase 3 → Phase 4.',
         align='center', fn='smallPlainLabelFont')
     _sep(8, 'in')
 
@@ -593,18 +845,8 @@ def build_ui():
         columnWidth2=(_LBL_W, _FLD_W),
         annotation=(
             'Root identifier for this hair group.\n'
-            'e.g.  Hair  |  Tail  |  Braid\n'
-            'If Section is left blank, this becomes the full name.'))
-
-    section_ctrl = cmds.textFieldGrp(
-        label='Section (optional):',
-        text='',
-        columnWidth2=(_LBL_W, _FLD_W),
-        annotation=(
-            'Directional or region prefix.\n'
-            'e.g.  F  R  B  LT  L\n'
-            'Leave blank if there is only one hair section.\n\n'
-            'With Section "F" + Base "Hair"  →  full name is "F_Hair".'))
+            'e.g.  Hair  |  F_Hair  |  Tail  |  Braid\n'
+            'This becomes the full name used for all generated nodes.'))
 
     _sep(4, 'none')
 
@@ -631,13 +873,30 @@ def build_ui():
         buttonLabel='Pick ←',
         columnWidth3=(_LBL_W, _FLD_W - _BTN_W, _BTN_W),
         annotation=(
-            'Character skull / head joint that the FK master group will be\n'
-            'matched to. Used by Phase 4 (FK Layer) only.\n'
-            'Select the joint in the viewport then click "Pick ←".'))
+            'Character skull / head joint.\n'
+            'The FK master group and IK joint group are both matched to this\n'
+            'joint in Phase 1 and Phase 5.  Select the joint then click "Pick ←".'))
     cmds.textFieldButtonGrp(
         head_jnt_ctrl, e=True,
         bc=lambda: cmds.textFieldButtonGrp(
             head_jnt_ctrl, e=True,
+            text=(cmds.ls(sl=True, objectsOnly=True) or [''])[0]))
+
+    _sep(4, 'none')
+
+    temp_jnt_ctrl = cmds.textFieldButtonGrp(
+        label='Temp Hair Joint:',
+        text='temp_hair_jnt',
+        buttonLabel='Pick ←',
+        columnWidth3=(_LBL_W, _FLD_W - _BTN_W, _BTN_W),
+        annotation=(
+            'Joint used as the IK-twist world-up object (Phase 2) and\n'
+            'wired to track the "Main" controller via blendMatrix (Phase 3).\n'
+            'Select the joint then click "Pick ←".'))
+    cmds.textFieldButtonGrp(
+        temp_jnt_ctrl, e=True,
+        bc=lambda: cmds.textFieldButtonGrp(
+            temp_jnt_ctrl, e=True,
             text=(cmds.ls(sl=True, objectsOnly=True) or [''])[0]))
 
     cmds.setParent('..')   # columnLayout
@@ -723,7 +982,7 @@ def build_ui():
         height=_BTN_H_LG,
         backgroundColor=_COL_BLUE,
         command=lambda _: run_phase1(
-            _full_name(base_ctrl, section_ctrl),
+            _get_name(base_ctrl),
             cmds.textFieldButtonGrp(head_jnt_ctrl, q=True, text=True)))
 
     cmds.setParent('..')
@@ -765,8 +1024,12 @@ def build_ui():
     _lbl('Before running Phase 2:', bold=True)
     _lbl('  • Timeline must be at frame 1.')
     _lbl('  • The proxy mesh name in Global Settings must match a mesh in the scene.')
-    _lbl('  • For IK twist control, a joint named "temp_hair_jnt" must exist.')
-    _lbl('    (If it does not exist, twist control is skipped — not an error.)')
+    _lbl('  • Set "Temp Hair Joint" in Global Settings for IK twist control.')
+    _sep(4, 'none')
+    _lbl('What Phase 2 creates:', bold=True)
+    _lbl('  • Follicles + output curves attached to proxy mesh.')
+    _lbl('  • BlendShape per IK curve: output_crv (target 0) + start_crv (target 1).')
+    _lbl('  • Nucleus condition node to switch between output and start curves.')
     _sep(6, 'in')
 
     cmds.button(
@@ -774,17 +1037,51 @@ def build_ui():
         height=_BTN_H_LG,
         backgroundColor=_COL_BLUE,
         command=lambda _: run_phase2(
-            cmds.textFieldButtonGrp(proxy_ctrl, q=True, text=True),
-            _full_name(base_ctrl, section_ctrl)))
+            cmds.textFieldButtonGrp(proxy_ctrl,    q=True, text=True),
+            _get_name(base_ctrl),
+            cmds.textFieldButtonGrp(temp_jnt_ctrl, q=True, text=True)))
 
     cmds.setParent('..')
     cmds.setParent('..')
 
     # ══════════════════════════════════════════════════════════════════════════
-    # PHASE 3
+    # PHASE 3  —  TEMP JOINT RIG
     # ══════════════════════════════════════════════════════════════════════════
     cmds.frameLayout(
-        label='  PHASE 3  —  Skin Weights  (optional)',
+        label='  PHASE 3  —  Temp Joint Rig',
+        collapsable=True, collapse=False,
+        marginHeight=8, marginWidth=8, borderStyle='etchedIn')
+    cmds.columnLayout(adjustableColumn=True, rowSpacing=4)
+
+    _lbl('Wires the Temp Hair Joint to track the "Main" controller.', bold=True)
+    _sep(4, 'none')
+    _lbl('  The temp joint provides a stable world-up axis for the IK twist')
+    _lbl('  control set up in Phase 2.  A blendMatrix + multMatrix network')
+    _lbl('  drives its offsetParentMatrix so it follows "Main" when the nucleus')
+    _lbl('  simulation is active, and rests at a fixed position when sim is off.')
+    _sep(6, 'in')
+    _lbl('Before running Phase 3:', bold=True)
+    _lbl('  • Phase 2 must have been run (nucleus condition node must exist).')
+    _lbl('  • A controller named exactly "Main" must exist in the scene.')
+    _lbl('  • The Temp Hair Joint must be set in Global Settings.')
+    _sep(6, 'in')
+
+    cmds.button(
+        label='Run Phase 3  ▶  Wire Temp Joint Rig',
+        height=_BTN_H_LG,
+        backgroundColor=_COL_BLUE,
+        command=lambda _: build_temp_jnt_rig(
+            cmds.textFieldButtonGrp(temp_jnt_ctrl, q=True, text=True),
+            _get_name(base_ctrl)))
+
+    cmds.setParent('..')
+    cmds.setParent('..')
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # PHASE 4  —  SKIN WEIGHTS
+    # ══════════════════════════════════════════════════════════════════════════
+    cmds.frameLayout(
+        label='  PHASE 4  —  Skin Weights  (optional)',
         collapsable=True, collapse=False,
         marginHeight=8, marginWidth=8, borderStyle='etchedIn')
     cmds.columnLayout(adjustableColumn=True, rowSpacing=4)
@@ -823,22 +1120,23 @@ def build_ui():
     _sep(6, 'in')
 
     cmds.button(
-        label='Run Phase 3  ▶  Apply Skin Weights',
+        label='Run Phase 4  ▶  Apply Skin Weights',
         height=_BTN_H_LG,
         backgroundColor=_COL_BLUE,
-        command=lambda _: run_phase3(
-            _full_name(base_ctrl, section_ctrl),
-            cmds.checkBoxGrp(ng_check_ctrl,      q=True, value1=True),
-            cmds.textFieldButtonGrp(ngskin_path_ctrl, q=True, text=True)))
+        command=lambda _: run_phase4(
+            _get_name(base_ctrl),
+            cmds.checkBoxGrp(ng_check_ctrl,       q=True, value1=True),
+            cmds.textFieldButtonGrp(ngskin_path_ctrl, q=True, text=True),
+            cmds.textFieldButtonGrp(temp_jnt_ctrl, q=True, text=True)))
 
     cmds.setParent('..')
     cmds.setParent('..')
 
     # ══════════════════════════════════════════════════════════════════════════
-    # PHASE 4
+    # PHASE 5  —  FK CONTROLLER LAYER
     # ══════════════════════════════════════════════════════════════════════════
     cmds.frameLayout(
-        label='  PHASE 4  —  FK Controller Layer',
+        label='  PHASE 5  —  FK Controller Layer',
         collapsable=True, collapse=False,
         marginHeight=8, marginWidth=8, borderStyle='etchedIn')
     cmds.columnLayout(adjustableColumn=True, rowSpacing=4)
@@ -848,16 +1146,18 @@ def build_ui():
     _sep(6, 'in')
 
     _lbl('What gets created:', bold=True)
-    _lbl('  {name}_fk_master_grp          matched to Head Joint (world pos + rot)')
-    _lbl('    └─  {chain}_fk_offset_1_grp   offsetParentMatrix ← IK_jnt_1.matrix (local)')
+    _lbl('  {name}_fk_master_grp          matched to Head Joint, then live')
+    _lbl('  │                             parentConstraint ← Head Joint')
+    _lbl('    └─  {chain}_fk_offset_1_grp   pos: matchTransform to IK jnt 1')
+    _lbl('    │                              rot: decomposeMatrix ← IK_jnt_1.matrix')
     _lbl('          └─  {chain}_fk_ctrl_1   nurbsCircle  (add FK offsets here)')
-    _lbl('                └─  {chain}_fk_offset_2_grp   ← IK_jnt_2.matrix (local)')
+    _lbl('                └─  {chain}_fk_offset_2_grp   ← IK_jnt_2.matrix')
     _lbl('                      └─  {chain}_fk_ctrl_2  …  (repeats for all 7 joints)')
     _lbl('  {name}_fk_jnt_grp             chain of FK joints, each parent-constrained')
     _lbl('                               to its corresponding FK controller.')
     _sep(6, 'in')
 
-    _lbl('Before running Phase 4:', bold=True)
+    _lbl('Before running Phase 5:', bold=True)
     _lbl('  • Phase 1 must have been run (IK joints must exist in the scene).')
     _lbl('  • "Head Joint (FK)" in Global Settings must name a valid joint.')
     _sep(6, 'in')
@@ -873,11 +1173,11 @@ def build_ui():
     _sep(6, 'in')
 
     cmds.button(
-        label='Run Phase 4  ▶  Build FK Layer',
+        label='Run Phase 5  ▶  Build FK Layer',
         height=_BTN_H_LG,
         backgroundColor=_COL_BLUE,
         command=lambda _: build_fk_layer(
-            _full_name(base_ctrl, section_ctrl),
+            _get_name(base_ctrl),
             cmds.textFieldButtonGrp(head_jnt_ctrl, q=True, text=True),
             cmds.floatSliderGrp(fk_scale_ctrl,     q=True, value=True)))
 

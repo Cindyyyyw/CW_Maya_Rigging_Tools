@@ -5,4 +5,4 @@ FACS Information retrieved from :
 - https://www.innerbody.com/anatomy/muscular/head-neck
 
 
-There are 64 AU (action units), however anatomically there are 62 muscles of facial expressions
+There are 42? AU (action units), however anatomically there are 62 muscles of facial expressions
